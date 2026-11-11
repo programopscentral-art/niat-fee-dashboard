@@ -1,0 +1,18 @@
+.lg { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 16px; background: var(--color-bg); font-family: var(--font-anthropic-sans); color: var(--color-fg); }
+.lg[hidden], .ub[hidden] { display: none; }
+.lg-card { width: 100%; max-width: 26rem; background: var(--color-panel); border: 1px solid var(--color-border-line); border-radius: 14px; padding: 28px; box-shadow: 0 6px 18px rgba(16,35,66,.08); }
+.lg-eyebrow { margin: 0 0 4px; font-size: .85rem; color: var(--color-fg-muted); }
+.lg-title { margin: 0 0 20px; font-size: 1.5rem; font-weight: 650; }
+.lg form { display: flex; flex-direction: column; gap: 10px; }
+.lg label { font-size: .85rem; font-weight: 500; }
+.lg input { font: inherit; padding: 10px 12px; border: 1px solid var(--color-border-line); border-radius: 8px; background: var(--color-bg); color: var(--color-fg); }
+.lg input:focus-visible, .lg button:focus-visible, .ub button:focus-visible { outline: 2px solid #2563a8; outline-offset: 2px; }
+.lg button[type=submit] { font: inherit; font-weight: 600; padding: 10px; border: 0; border-radius: 8px; background: #12315a; color: #fff; cursor: pointer; }
+.lg button[type=submit]:hover { filter: brightness(1.15); }
+.lg-link { font: inherit; font-size: .85rem; background: none; border: 0; color: var(--color-fg-muted); cursor: pointer; text-decoration: underline; }
+.lg-note { margin: 0; font-size: .9rem; line-height: 1.5; color: var(--color-fg-muted); }
+.lg-msg { min-height: 1.2em; margin: 14px 0 0; font-size: .875rem; color: var(--color-fg-muted); }
+.lg-msg.bad { color: var(--color-bad); }
+.ub { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 12px; padding: 10px clamp(1rem, 3vw, 2.25rem) 0; font-family: var(--font-anthropic-sans); font-size: .85rem; color: var(--color-fg-muted); }
+.ub b { color: var(--color-fg); }
+.ub button { font: inherit; font-size: .85rem; padding: 5px 12px; border: 1px solid var(--color-border-line); border-radius: 8px; background: var(--color-panel); color: var(--color-fg); cursor: pointer; }

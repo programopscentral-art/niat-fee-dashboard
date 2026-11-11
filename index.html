@@ -1,0 +1,1604 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>NIAT Fee Collection Visibility</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;650&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<style>
+:root {
+  color-scheme: light;
+  --font-anthropic-sans: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-anthropic-serif: "Source Serif 4", Georgia, "Times New Roman", serif;
+  --color-bg: #f7f7f5; --color-panel: #ffffff; --color-fg: #1f1f1d; --color-fg-muted: #6b6a66;
+  --color-border-line: #e4e3df; --color-ok: #2f7d4f; --color-warn: #b06a10; --color-bad: #c23b32;
+  --cds-chart-muted: #b9b8b3; --cds-chart-grid: #ecebe7; --cds-chart-axis: #a8a7a2; --cds-chart-reference: #55544f; --cds-chart-status-critical: #d4473c;
+  --cds-surface-popover: #ffffff; --cds-border: #dcdbd6; --cds-shadow-popover: 0 6px 20px rgba(20,20,18,.12); --cds-text-secondary: #6b6a66;
+  --cds-font-size-caption: 0.8125rem; --cds-font-size-body: 0.9375rem; --cds-font-size-heading: 1.0625rem; --cds-font-size-title: 1.5rem; --cds-font-weight-medium: 500;
+  --cds-gap-xs: 4px; --cds-gap-sm: 8px; --cds-gap-md: 14px; --cds-gap-lg: 22px;
+  --cds-pad-xs: 4px; --cds-pad-sm: 8px; --cds-pad-md: 12px; --cds-pad-lg: 18px;
+  --cds-radius: 8px; --cds-dur-slow: 220ms; --cds-ease-out: cubic-bezier(.2,.7,.2,1);
+  --nf-c1: #2f6fb3; --nf-c2: #d07a1f;
+}
+@media (prefers-color-scheme: dark) {
+  :root { color-scheme: dark;
+    --color-bg: #171716; --color-panel: #201f1e; --color-fg: #ecebe7; --color-fg-muted: #a3a29d;
+    --color-border-line: #34332f; --color-ok: #5fbf85; --color-warn: #e0a24d; --color-bad: #ef7a70;
+    --cds-chart-muted: #5d5c58; --cds-chart-grid: #2c2b28; --cds-chart-axis: #6f6e69; --cds-chart-reference: #c9c8c3; --cds-chart-status-critical: #e8665c;
+    --cds-surface-popover: #262523; --cds-border: #3d3c38; --cds-shadow-popover: 0 6px 20px rgba(0,0,0,.45); --cds-text-secondary: #a3a29d;
+    --nf-c1: #6aa7e6; --nf-c2: #f0a053; }
+}
+html, body { margin: 0; background: var(--color-bg); color: var(--color-fg); font-family: var(--font-anthropic-sans); font-size: var(--cds-font-size-body); }
+:root { box-sizing: border-box; padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
+#dash-root { padding: clamp(0.75rem, 3vw, 2rem); }
+[hidden] { display: none !important; }
+.dash-select { font: inherit; font-size: var(--cds-font-size-caption); padding: 4px 8px; border: 1px solid var(--color-border-line); border-radius: var(--cds-radius); background: var(--color-panel); color: var(--color-fg); }
+.dash-skeleton { background: color-mix(in srgb, var(--color-fg) 5%, transparent); border-radius: var(--cds-radius); }
+.nf-snapshot { font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); margin: 0 0 var(--cds-gap-md); }
+</style>
+<link rel="stylesheet" href="app.css">
+<script src="config.js"></script>
+<script src="app.js"></script>
+</head>
+<body>
+<div id="login" class="lg" hidden>
+  <div class="lg-card">
+    <p class="lg-eyebrow">NIAT · Finance operations</p>
+    <h1 class="lg-title">Fee collection visibility</h1>
+    <form id="lg-email-form">
+      <label for="lg-email">Work email</label>
+      <input id="lg-email" type="email" autocomplete="email" required placeholder="name@nxtwave.co.in">
+      <button type="submit">Send login code</button>
+    </form>
+    <form id="lg-code-form" hidden>
+      <p class="lg-note">We emailed a login link to <b id="lg-sent-to"></b>. Click it, or type the 6-digit code from the email.</p>
+      <label for="lg-code">Code</label>
+      <input id="lg-code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="123456">
+      <button type="submit">Log in</button>
+      <button type="button" class="lg-link" id="lg-back">Use a different email</button>
+    </form>
+    <p id="lg-msg" class="lg-msg" role="status"></p>
+  </div>
+</div>
+<div id="userbar" class="ub" hidden>
+  <span>Signed in as <b id="ub-name"></b> · <span id="ub-scope"></span></span>
+  <button type="button" id="ub-logout">Log out</button>
+</div>
+<div id="app" hidden>
+<div id="dash-root">
+<style>
+#dash-root { --dash-gutter: clamp(0.75rem, 3vw, 2rem); }
+.nf { font-family: var(--font-anthropic-sans); color: var(--color-fg); display: flex; flex-direction: column; gap: var(--cds-gap-lg); max-width: 92rem; margin-inline: auto; }
+.nf * { box-sizing: border-box; }
+.nf-eyebrow { font-size: var(--cds-font-size-caption); letter-spacing: .08em; text-transform: uppercase; color: var(--color-fg-muted); margin: 0 0 var(--cds-gap-xs); }
+.nf h1 { font-family: var(--font-anthropic-serif); font-weight: 400; font-size: calc(var(--cds-font-size-title) * 1.25); line-height: 1.15; margin: 0; }
+.nf h2 { font-size: var(--cds-font-size-heading); font-weight: var(--cds-font-weight-medium); margin: 0; }
+.nf h3 { font-family: var(--font-anthropic-serif); font-weight: 400; font-size: var(--cds-font-size-title); margin: 0; }
+.nf-masthead { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-end; gap: var(--cds-gap-md); padding-bottom: var(--cds-pad-md); border-bottom: 1px solid var(--color-border-line); }
+.nf-lede { margin: var(--cds-gap-sm) 0 0; color: var(--color-fg-muted); max-width: 56rem; line-height: 1.55; }
+.nf .nf-lede b { color: var(--color-fg); font-weight: 600; }
+.nf-asof { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); }
+.nf-asof b { font-family: var(--font-anthropic-serif); font-weight: 400; font-size: var(--cds-font-size-heading); color: var(--color-fg); }
+.nf-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--cds-gap-sm); position: sticky; top: 0; z-index: 4; background: var(--color-bg); padding: var(--cds-pad-xs) 0; }
+.nf-tabs { display: flex; flex-wrap: wrap; gap: 2px; padding: 3px; border: 1px solid var(--color-border-line); border-radius: calc(var(--cds-radius) + 3px); background: var(--color-panel); }
+.nf-tab { font: inherit; font-size: var(--cds-font-size-caption); background: none; border: 0; border-radius: var(--cds-radius); padding: var(--cds-pad-xs) var(--cds-pad-md); color: var(--color-fg-muted); cursor: pointer; white-space: nowrap; }
+.nf-tab:hover { color: var(--color-fg); }
+.nf-tab[aria-selected="true"] { color: var(--color-bg); background: var(--color-fg); }
+.nf-filter { display: flex; align-items: center; gap: var(--cds-gap-sm); font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); }
+.nf-page { display: flex; flex-direction: column; gap: var(--cds-gap-lg); }
+.nf-sec-head { display: flex; flex-direction: column; gap: 2px; }
+.nf-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 11rem), 1fr)); gap: var(--cds-gap-md); }
+.nf-tile { background: var(--color-panel); border: 1px solid var(--color-border-line); border-left: 3px solid var(--cds-chart-muted); border-radius: var(--cds-radius); padding: var(--cds-pad-md) var(--cds-pad-lg); display: flex; flex-direction: column; gap: var(--cds-gap-xs); }
+.nf-tile[data-focus] { cursor: pointer; transition: border-color var(--cds-dur-slow), background var(--cds-dur-slow); }
+.nf-tile[data-focus]:hover { background: color-mix(in srgb, var(--color-fg) 3%, var(--color-panel)); border-top-color: var(--cds-chart-axis); border-right-color: var(--cds-chart-axis); border-bottom-color: var(--cds-chart-axis); }
+.nf-tile[data-focus]:focus-visible { outline: 2px solid var(--color-fg); outline-offset: 2px; }
+.nf-tile-go { font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); opacity: 0; transition: opacity var(--cds-dur-slow); margin-top: auto; }
+.nf-tile[data-focus]:hover .nf-tile-go, .nf-tile[data-focus]:focus-visible .nf-tile-go { opacity: 1; }
+.nf-sublink { cursor: pointer; border-radius: 3px; padding: 0 2px; }
+.nf-sublink:hover { color: var(--color-fg); text-decoration: underline; }
+.nf-focusbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--cds-gap-sm); font-size: var(--cds-font-size-caption); padding: var(--cds-pad-xs) var(--cds-pad-sm); border: 1px solid var(--color-border-line); border-radius: var(--cds-radius); background: color-mix(in srgb, var(--nf-up) 8%, transparent); }
+.nf-focusbar b { font-weight: var(--cds-font-weight-medium); }
+@media (prefers-reduced-motion: no-preference) { .nf-flash { animation: nf-flash 1.4s var(--cds-ease-out); } }
+@keyframes nf-flash { 0% { box-shadow: 0 0 0 3px var(--nf-up); } 100% { box-shadow: 0 0 0 3px transparent; } }
+.nf-seg { display: inline-flex; gap: 2px; padding: 3px; border: 1px solid var(--color-border-line); border-radius: calc(var(--cds-radius) + 3px); }
+.nf-segbtn { font: inherit; font-size: var(--cds-font-size-caption); background: none; border: 0; border-radius: var(--cds-radius); padding: var(--cds-pad-xs) var(--cds-pad-sm); color: var(--color-fg-muted); cursor: pointer; white-space: nowrap; }
+.nf-segbtn[aria-pressed="true"] { background: var(--color-fg); color: var(--color-bg); }
+.nf tr.nf-gap td:first-child { box-shadow: inset 3px 0 0 var(--cds-chart-status-critical); }
+.nf-tile.a-open { border-left-color: var(--nf-open); }
+.nf-tile.a-up { border-left-color: var(--nf-up); }
+.nf-tile.a-bad { border-left-color: var(--cds-chart-status-critical); }
+.nf-tile.a-warn { border-left-color: var(--color-warn); }
+.nf-tile-label { font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); text-transform: uppercase; letter-spacing: .05em; }
+.nf-big { font-family: var(--font-anthropic-serif); font-weight: 400; font-size: calc(var(--cds-font-size-title) * 1.3); line-height: 1.05; font-variant-numeric: tabular-nums; }
+.nf-sub { font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); font-variant-numeric: tabular-nums; }
+.nf-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 26rem), 1fr)); gap: var(--cds-gap-md); }
+.nf-card { background: var(--color-panel); border: 1px solid var(--color-border-line); border-radius: var(--cds-radius); padding: var(--cds-pad-lg); display: flex; flex-direction: column; gap: var(--cds-gap-sm); min-width: 0; }
+.nf-card-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-start; gap: var(--cds-gap-sm); }
+.nf-note { margin: 2px 0 0; font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); line-height: 1.5; }
+.nf-scroll { overflow: auto; max-height: 36rem; border: 1px solid var(--color-border-line); border-radius: var(--cds-radius); }
+.nf-scroll.nf-short { max-height: 21rem; }
+.nf table { width: 100%; border-collapse: collapse; font-size: var(--cds-font-size-caption); font-variant-numeric: tabular-nums; }
+.nf th { text-align: left; font-weight: var(--cds-font-weight-medium); text-transform: uppercase; letter-spacing: .04em; font-size: 0.68rem; color: var(--color-fg-muted); padding: var(--cds-pad-sm); border-bottom: 1px solid var(--color-border-line); position: sticky; top: 0; background: var(--color-panel); white-space: nowrap; z-index: 1; }
+.nf td { padding: var(--cds-pad-sm); border-bottom: 1px solid var(--color-border-line); vertical-align: top; line-height: 1.4; }
+.nf tbody tr:last-child td { border-bottom: 0; }
+.nf tbody tr:hover td { background: color-mix(in srgb, var(--color-fg) 4%, transparent); }
+.nf tbody.nf-click tr { cursor: pointer; }
+.nf td.nf-num, .nf th.nf-num { text-align: right; }
+.nf td.nf-strong { font-weight: var(--cds-font-weight-medium); }
+.nf td.nf-nowrap { white-space: nowrap; }
+.nf td.nf-long { min-width: 16rem; max-width: 30rem; color: var(--color-fg-muted); white-space: pre-line; }
+.nf th.nf-sortable { cursor: pointer; user-select: none; }
+.nf th.nf-sortable:hover { color: var(--color-fg); }
+.nf th.nf-sortable[aria-sort="ascending"]::after { content: " ↑"; }
+.nf th.nf-sortable[aria-sort="descending"]::after { content: " ↓"; }
+.nf-pill { display: inline-flex; align-items: center; gap: 0.35rem; padding: 0.1rem 0.55rem; border-radius: 999px; font-size: 0.72rem; white-space: nowrap; background: color-mix(in srgb, currentColor 12%, transparent); }
+.nf-pill::before { content: ""; width: 0.4rem; height: 0.4rem; border-radius: 50%; background: currentColor; }
+.nf-pill.k-ok { color: var(--color-ok); }
+.nf-pill.k-info { color: var(--nf-up); }
+.nf-pill.k-warn { color: var(--color-warn); }
+.nf-pill.k-bad { color: var(--color-bad); }
+.nf-pill.k-muted { color: var(--color-fg-muted); }
+.nf-search { font: inherit; font-size: var(--cds-font-size-caption); padding: var(--cds-pad-xs) var(--cds-pad-sm); border: 1px solid var(--color-border-line); border-radius: var(--cds-radius); background: var(--color-bg); color: var(--color-fg); width: min(100%, 20rem); }
+.nf-legend { display: flex; flex-wrap: wrap; gap: var(--cds-gap-md); font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); }
+.nf-legend span { display: inline-flex; align-items: center; gap: 0.35rem; }
+.nf-sw { width: 0.65rem; height: 0.65rem; border-radius: 2px; display: inline-block; }
+.nf-c-open, .nf-c-done, .nf-c-b25 { background: var(--nf-open); }
+.nf-c-up, .nf-c-prog, .nf-c-b26 { background: var(--nf-up); }
+.nf-c-closed { background: var(--cds-chart-muted); }
+.nf-c-pending { background: color-mix(in srgb, var(--color-warn) 55%, transparent); }
+.nf-c-check, .nf-c-nd { background: var(--cds-chart-status-critical); }
+.nf-c-ns { background: var(--cds-chart-grid); }
+.nf-chart { position: relative; min-height: 14rem; }
+.nf-chart svg text { font-family: var(--font-anthropic-sans); }
+.nf-tip { position: absolute; pointer-events: none; background: var(--cds-surface-popover); border: 1px solid var(--cds-border); border-radius: var(--cds-radius); box-shadow: var(--cds-shadow-popover); padding: var(--cds-pad-xs) var(--cds-pad-sm); font-size: var(--cds-font-size-caption); max-width: 17rem; z-index: 3; line-height: 1.45; }
+.nf-tip .t1 { font-weight: var(--cds-font-weight-medium); }
+.nf-tip .t2 { color: var(--cds-text-secondary); }
+.nf-stack { display: flex; flex-direction: column; gap: var(--cds-gap-sm); min-height: 5rem; }
+.nf-srow { display: grid; grid-template-columns: minmax(7rem, 10rem) 1fr; gap: var(--cds-gap-sm); align-items: center; font-size: var(--cds-font-size-caption); }
+.nf-sbar { display: flex; height: 1.5rem; border-radius: var(--cds-radius); overflow: hidden; background: var(--cds-chart-grid); gap: 1px; }
+.nf-sbar > div { display: flex; align-items: center; justify-content: center; color: var(--color-bg); font-size: 0.72rem; font-variant-numeric: tabular-nums; min-width: 0; overflow: hidden; }
+.nf-sbar > div.nf-c-ns, .nf-sbar > div.nf-c-pending { color: var(--color-fg); }
+.nf-fail { display: flex; align-items: center; justify-content: center; gap: 0.4rem; min-height: inherit; height: 100%; color: var(--color-fg-muted); font-size: var(--cds-font-size-caption); }
+.nf-fail::before { content: ""; width: 0.375rem; height: 0.375rem; border-radius: 50%; background: var(--color-bad); }
+.nf [data-dash-source-state=empty] { color: transparent; }
+.nf [data-dash-source-state=refreshing] { opacity: .5; transition: opacity var(--cds-dur-slow); }
+.nf-detail { border-left: 3px solid var(--nf-open); }
+.nf-detail-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 17rem), 1fr)); gap: var(--cds-gap-md) var(--cds-gap-lg); }
+.nf-detail dl { margin: 0; display: grid; grid-template-columns: minmax(7.5rem, auto) 1fr; gap: 6px var(--cds-gap-md); font-size: var(--cds-font-size-caption); align-content: start; }
+.nf-detail dt { color: var(--color-fg-muted); }
+.nf-detail dd { margin: 0; white-space: pre-line; overflow-wrap: anywhere; }
+.nf-detail h4 { margin: 0 0 var(--cds-gap-xs); font-size: 0.68rem; text-transform: uppercase; letter-spacing: .05em; color: var(--color-fg-muted); font-weight: var(--cds-font-weight-medium); grid-column: 1 / -1; }
+.nf-close { font: inherit; font-size: var(--cds-font-size-caption); background: none; border: 1px solid var(--color-border-line); border-radius: var(--cds-radius); padding: var(--cds-pad-xs) var(--cds-pad-sm); color: var(--color-fg-muted); cursor: pointer; }
+.nf-msgs { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 24rem), 1fr)); gap: var(--cds-gap-md); min-height: 10rem; }
+.nf-msg { background: var(--color-panel); border: 1px solid var(--color-border-line); border-radius: var(--cds-radius); padding: var(--cds-pad-lg); display: flex; flex-direction: column; gap: var(--cds-gap-sm); min-width: 0; }
+.nf-msg-meta { display: flex; flex-wrap: wrap; gap: var(--cds-gap-xs) var(--cds-gap-md); font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); }
+.nf-template .nf-msg-body { max-height: none; font-size: var(--cds-font-size-body); }
+.nf-msg-body { white-space: pre-wrap; font-size: var(--cds-font-size-caption); line-height: 1.55; background: var(--color-bg); border: 1px solid var(--color-border-line); border-radius: var(--cds-radius); padding: var(--cds-pad-md); max-height: 18rem; overflow: auto; margin: 0; font-family: inherit; }
+.nf-msg details summary { cursor: pointer; font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); }
+.nf-msg details .nf-msg-body { margin-top: var(--cds-gap-xs); }
+.nf-foot { font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); border-top: 1px solid var(--color-border-line); padding-top: var(--cds-pad-md); }
+.nf-foot dt { color: var(--color-fg); font-weight: var(--cds-font-weight-medium); margin-top: var(--cds-gap-sm); }
+.nf-foot dd { margin: 0; }
+@media (max-width: 44rem) { .nf .nf-hide-narrow { display: none; } .nf-asof { align-items: flex-start; } }
+
+/* Professional theme */
+:root { --color-bg:#eef1f6; --color-panel:#fff; --color-fg:#14233a; --color-fg-muted:#5b6b82; --color-border-line:#dde3ec; --cds-border:#dde3ec; --cds-chart-grid:#e8edf4; --nf-brand:#12315a; --nf-accent:#2563a8; --nf-shadow:0 1px 2px rgba(16,35,66,.06),0 6px 18px rgba(16,35,66,.05); --cds-radius:10px; --font-anthropic-serif:"Inter",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; }
+@media (prefers-color-scheme: dark) { :root { --color-bg:#0e1522; --color-panel:#151e2e; --color-fg:#e6ecf5; --color-fg-muted:#93a3ba; --color-border-line:#26324a; --cds-border:#2d3a55; --cds-chart-grid:#222d44; --nf-brand:#1a3a69; --nf-accent:#6aa7e6; --nf-shadow:0 1px 2px rgba(0,0,0,.45); } }
+#dash-root { padding: clamp(1rem, 3vw, 2.25rem); }
+.nf { gap: 26px; }
+.nf-masthead { background: linear-gradient(135deg, var(--nf-brand), #1f4f8a); color:#fff; border:0; border-radius:14px; padding:24px 28px; box-shadow:var(--nf-shadow); }
+.nf-masthead .nf-eyebrow { color:rgba(255,255,255,.72); text-transform:none; letter-spacing:.01em; font-size:.85rem; }
+.nf h1 { font-weight:650; letter-spacing:-.015em; font-size:1.85rem; color:#fff; }
+.nf-masthead .nf-lede { color:rgba(255,255,255,.84); }
+.nf .nf-masthead .nf-lede b, .nf-masthead .nf-asof b { color:#fff; font-weight:650; }
+.nf-masthead .nf-asof { color:rgba(255,255,255,.75); }
+.nf-tabs { background:transparent; border:0; border-bottom:1px solid var(--color-border-line); border-radius:0; padding:0; gap:6px; }
+.nf-tab { border-radius:0; padding:11px 16px; font-weight:500; border-bottom:2px solid transparent; margin-bottom:-1px; }
+.nf-tab[aria-selected="true"] { background:none; color:var(--nf-accent); border-bottom-color:var(--nf-accent); font-weight:650; }
+.nf-tab:focus-visible, .nf-close:focus-visible, .nf-search:focus-visible, .dash-select:focus-visible { outline:2px solid var(--nf-accent); outline-offset:2px; }
+.nf-bar { padding:6px 0 0; }
+.nf-card, .nf-tile, .nf-msg { border-radius:12px; box-shadow:var(--nf-shadow); }
+.nf-card { padding:22px; gap:14px; }
+.nf-tile { border-left-width:4px; padding:16px 18px; gap:4px; }
+.nf-tile-label, .nf-detail h4 { text-transform:none; letter-spacing:0; font-size:.8125rem; font-weight:500; }
+.nf-big { font-weight:650; font-size:2rem; letter-spacing:-.02em; color:var(--color-fg); }
+.nf h2 { font-weight:650; font-size:1.125rem; letter-spacing:-.01em; }
+.nf th { text-transform:none; letter-spacing:0; font-size:.75rem; font-weight:650; color:var(--color-fg); background:color-mix(in srgb, var(--nf-brand) 7%, var(--color-panel)); padding:11px 12px; }
+.nf td { padding:11px 12px; }
+.nf tbody tr:nth-child(even) td { background:color-mix(in srgb, var(--nf-brand) 3%, transparent); }
+.nf tbody tr:hover td { background:color-mix(in srgb, var(--nf-accent) 9%, transparent); }
+.nf-scroll { border-radius:10px; }
+.nf-pill { font-weight:600; padding:.15rem .65rem; }
+.nf-search, .dash-select { background:var(--color-panel); border-radius:8px; padding:7px 11px; }
+.nf-close { border-radius:8px; padding:7px 14px; font-weight:500; }
+.nf-close:hover { border-color:var(--nf-accent); color:var(--nf-accent); }
+.nf-copy { background:var(--nf-accent); border-color:var(--nf-accent); color:#fff; }
+.nf-copy:hover { color:#fff; filter:brightness(1.1); }
+.nf-msg-body { background:color-mix(in srgb, var(--nf-brand) 4%, var(--color-panel)); }
+.nf-foot { border-top-color:var(--color-border-line); }
+.nf-sop td { white-space:pre-line; min-width:6rem; } .nf-sop td.act { min-width:22rem; }
+.nf-sop-list { margin:0 0 4px; padding-left:1.2rem; line-height:1.6; font-size:var(--cds-font-size-caption); color:var(--color-fg-muted); }
+</style>
+
+<div class="nf">
+  <header class="nf-masthead">
+    <div>
+      <p class="nf-eyebrow">NIAT · Finance operations</p>
+      <h1 id="top">Fee collection visibility</h1>
+      <p class="nf-lede"><b data-draw="kpi" data-source="kpis" data-field="open" data-where="batch=All">—</b> fee windows are open and <b data-draw="kpi" data-source="kpis" data-field="closing14" data-where="batch=All">—</b> close within 14 days. <b data-draw="kpi" data-source="kpis" data-field="at_risk" data-where="batch=All">—</b> open or soon-opening windows have no announcement sent yet, and <b data-draw="kpi" data-source="kpis" data-field="pending" data-where="batch=All">—</b> universities haven’t shared fee dates.</p>
+    </div>
+    <div class="nf-asof"><span>Status as of</span><b data-draw="kpi" data-source="kpis" data-field="as_of" data-where="batch=All">—</b><span>2025 batch Sem 4 · 2026 batch Sem 2</span></div>
+  </header>
+
+  <div class="nf-bar">
+    <nav class="nf-tabs" role="tablist" aria-label="Dashboard pages">
+      <button class="nf-tab" role="tab" data-tab="overview" aria-selected="true">Overview</button>
+      <button class="nf-tab" role="tab" data-tab="universities" aria-selected="false">Universities</button>
+      <button class="nf-tab" role="tab" data-tab="calendar" aria-selected="false">Academic calendar</button>
+      <button class="nf-tab" role="tab" data-tab="announcements" aria-selected="false">Announcements</button>
+      <button class="nf-tab" role="tab" data-tab="messages" aria-selected="false">Resources</button>
+      <button class="nf-tab" role="tab" data-tab="playbook" aria-selected="false">Action plan</button>
+    </nav>
+    <label class="nf-filter">Batch
+      <select class="dash-select nf-batch" aria-label="Batch">
+        <option value="all">Both batches</option>
+        <option value="2025">2025 batch · Sem 4 fee</option>
+        <option value="2026">2026 batch · Sem 2 fee</option>
+      </select>
+    </label>
+  </div>
+
+  <!-- OVERVIEW -->
+  <section id="overview" class="nf-page">
+    <div class="nf-tiles">
+      <div class="nf-tile a-open" data-focus="open" role="button" tabindex="0" title="See open windows">
+        <span class="nf-tile-label">Open now</span>
+        <span class="nf-big" data-draw="kpi" data-source="kpis" data-field="open" data-where="batch=All" data-fetchpriority="high">—</span>
+        <span class="nf-sub"><span class="nf-sublink" data-batch="2025">2025: <span data-draw="kpi" data-source="kpis" data-field="open" data-where="batch=2025">—</span></span> · <span class="nf-sublink" data-batch="2026">2026: <span data-draw="kpi" data-source="kpis" data-field="open" data-where="batch=2026">—</span></span></span>
+        <span class="nf-tile-go">See open windows →</span>
+      </div>
+      <div class="nf-tile a-bad" data-focus="closing14" role="button" tabindex="0" title="See deadlines">
+        <span class="nf-tile-label">Closing in 14 days</span>
+        <span class="nf-big" data-draw="kpi" data-source="kpis" data-field="closing14" data-where="batch=All">—</span>
+        <span class="nf-sub"><span class="nf-sublink" data-batch="2025">2025: <span data-draw="kpi" data-source="kpis" data-field="closing14" data-where="batch=2025">—</span></span> · <span class="nf-sublink" data-batch="2026">2026: <span data-draw="kpi" data-source="kpis" data-field="closing14" data-where="batch=2026">—</span></span></span>
+        <span class="nf-tile-go">See deadlines →</span>
+      </div>
+      <div class="nf-tile a-up" data-focus="opening30" role="button" tabindex="0" title="See upcoming windows">
+        <span class="nf-tile-label">Opening in 30 days</span>
+        <span class="nf-big" data-draw="kpi" data-source="kpis" data-field="opening30" data-where="batch=All">—</span>
+        <span class="nf-sub"><span class="nf-sublink" data-batch="2025">2025: <span data-draw="kpi" data-source="kpis" data-field="opening30" data-where="batch=2025">—</span></span> · <span class="nf-sublink" data-batch="2026">2026: <span data-draw="kpi" data-source="kpis" data-field="opening30" data-where="batch=2026">—</span></span></span>
+        <span class="nf-tile-go">See upcoming windows →</span>
+      </div>
+      <div class="nf-tile a-bad" data-focus="at_risk" role="button" tabindex="0" title="See which universities">
+        <span class="nf-tile-label">No announcement sent</span>
+        <span class="nf-big" data-draw="kpi" data-source="kpis" data-field="at_risk" data-where="batch=All">—</span>
+        <span class="nf-sub"><span class="nf-sublink" data-batch="2025">2025: <span data-draw="kpi" data-source="kpis" data-field="at_risk" data-where="batch=2025">—</span></span> · <span class="nf-sublink" data-batch="2026">2026: <span data-draw="kpi" data-source="kpis" data-field="at_risk" data-where="batch=2026">—</span></span></span>
+        <span class="nf-tile-go">See which universities →</span>
+      </div>
+      <div class="nf-tile a-warn" data-focus="pending" role="button" tabindex="0" title="See who hasn't shared">
+        <span class="nf-tile-label">Dates not shared</span>
+        <span class="nf-big" data-draw="kpi" data-source="kpis" data-field="pending" data-where="batch=All">—</span>
+        <span class="nf-sub"><span class="nf-sublink" data-batch="2025">2025: <span data-draw="kpi" data-source="kpis" data-field="pending" data-where="batch=2025">—</span></span> · <span class="nf-sublink" data-batch="2026">2026: <span data-draw="kpi" data-source="kpis" data-field="pending" data-where="batch=2026">—</span></span></span>
+        <span class="nf-tile-go">See who hasn't shared →</span>
+      </div>
+    </div>
+
+    <div class="nf-card">
+      <div class="nf-card-head">
+        <div class="nf-sec-head">
+          <h2 id="attention">Fee windows to watch</h2>
+          <p class="nf-note">Open now or opening within 30 days, most urgent first. Rows marked “Not started” have nothing sent on any announcement channel. Select a row for the full university profile.</p>
+        </div>
+        <div class="nf-seg" role="group" aria-label="Show">
+          <button type="button" class="nf-segbtn" data-watch="all" aria-pressed="true">All</button>
+          <button type="button" class="nf-segbtn" data-watch="gap" aria-pressed="false">No announcement sent</button>
+        </div>
+      </div>
+      <div class="nf-scroll">
+        <table data-source="watchlist" data-row-key="key">
+          <thead><tr>
+            <th data-field="university">University</th>
+            <th data-field="batch">Batch</th>
+            <th data-field="status">Status</th>
+            <th data-field="when">When</th>
+            <th data-field="deadline" class="nf-hide-narrow">Deadline</th>
+            <th data-field="announcements">Announcements</th>
+            <th data-field="poc" class="nf-hide-narrow">PM / COS</th>
+          </tr></thead>
+          <tbody data-draw="watchTable" class="nf-click"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="nf-grid">
+      <div class="nf-card">
+        <div class="nf-card-head">
+          <div class="nf-sec-head">
+            <h2 id="status-mix">Fee window status</h2>
+            <p class="nf-note">Universities in each status, by batch.</p>
+          </div>
+          <div class="nf-legend">
+            <span><i class="nf-sw nf-c-open"></i>Open</span>
+            <span><i class="nf-sw nf-c-up"></i>Upcoming</span>
+            <span><i class="nf-sw nf-c-pending"></i>Dates pending</span>
+            <span><i class="nf-sw nf-c-check"></i>Check dates</span>
+            <span><i class="nf-sw nf-c-closed"></i>Closed</span>
+          </div>
+        </div>
+        <div class="nf-stack" data-draw="statusBars" data-source="kpis"></div>
+      </div>
+      <div class="nf-card">
+        <div class="nf-card-head">
+          <div class="nf-sec-head">
+            <h2 id="by-month">Fee deadlines by month</h2>
+            <p class="nf-note">Universities whose fee collection closes in each month.</p>
+          </div>
+          <div class="nf-legend">
+            <span><i class="nf-sw nf-c-b25"></i>2025 batch</span>
+            <span><i class="nf-sw nf-c-b26"></i>2026 batch</span>
+          </div>
+        </div>
+        <div class="nf-chart" data-draw="monthChart" data-source="by_month"></div>
+      </div>
+    </div>
+
+    <div class="nf-card">
+      <div class="nf-sec-head">
+        <h2 id="pivot">Fee deadlines as written</h2>
+        <p class="nf-note">Every university grouped by its fee collection end date exactly as the sheet has it, including groups without a date (“Yet to Decide”, “Yet to Receive”, “NA”, blank), as in Pivot Table 1.</p>
+      </div>
+      <div class="nf-scroll nf-short">
+        <table data-source="pivot" data-row-key="key">
+          <thead><tr>
+            <th data-field="batch">Batch</th>
+            <th data-field="deadline">Fee collection end date</th>
+            <th data-field="dated" class="nf-hide-narrow">Type</th>
+            <th data-field="universities" class="nf-num">Universities</th>
+            <th data-field="names">Which</th>
+          </tr></thead>
+          <tbody data-draw="pivotTable"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- UNIVERSITIES -->
+  <section id="universities" class="nf-page" hidden>
+    <div class="nf-card nf-detail" id="uni-detail" hidden>
+      <div class="nf-card-head">
+        <div>
+          <p class="nf-eyebrow">University profile · <span data-draw="det" data-source="schedule" data-field="batch">—</span> batch</p>
+          <h3 data-draw="det" data-source="schedule" data-field="university">—</h3>
+        </div>
+        <button class="nf-close" type="button">Close</button>
+      </div>
+      <div class="nf-detail-grid">
+        <dl>
+          <h4>Fee collection</h4>
+          <dt>Status</dt><dd data-draw="det" data-source="schedule" data-field="status">—</dd>
+          <dt>Timing</dt><dd data-draw="det" data-source="schedule" data-field="when">—</dd>
+          <dt>Collection opens</dt><dd data-draw="det" data-source="schedule" data-field="fee_start_text">—</dd>
+          <dt>Collection closes</dt><dd data-draw="det" data-source="schedule" data-field="fee_end_text">—</dd>
+          <dt>Registration</dt><dd data-draw="det" data-source="schedule" data-field="registration">—</dd>
+          <dt>SOP phase</dt><dd data-draw="det" data-source="schedule" data-field="sop">—</dd>
+          <dt>Reminder</dt><dd data-draw="det" data-source="schedule" data-field="reminder">—</dd>
+        </dl>
+        <dl>
+          <h4>Academic calendar</h4>
+          <dt>Current semester</dt><dd data-draw="det" data-source="schedule" data-field="cur_sem">—</dd>
+          <dt>Starts</dt><dd data-draw="det" data-source="schedule" data-field="sem_start">—</dd>
+          <dt>Ends</dt><dd data-draw="det" data-source="schedule" data-field="sem_end">—</dd>
+          <dt>Next semester</dt><dd data-draw="det" data-source="schedule" data-field="next_sem">—</dd>
+          <dt>Starts</dt><dd data-draw="det" data-source="schedule" data-field="next_sem_start">—</dd>
+          <dt>Ends</dt><dd data-draw="det" data-source="schedule" data-field="next_sem_end">—</dd>
+        </dl>
+        <dl>
+          <h4>Announcements</h4>
+          <dt>Overall</dt><dd data-draw="det" data-source="announce" data-field="state">—</dd>
+          <dt>SC sheet</dt><dd data-draw="det" data-source="announce" data-field="click_share_sheet">—</dd>
+          <dt>Student app</dt><dd data-draw="det" data-source="announce" data-field="student_app">—</dd>
+          <dt>Student email</dt><dd data-draw="det" data-source="announce" data-field="student_mail">—</dd>
+          <dt>Student WhatsApp</dt><dd data-draw="det" data-source="announce" data-field="student_whatsapp">—</dd>
+          <dt>Parent app</dt><dd data-draw="det" data-source="announce" data-field="parent_app">—</dd>
+          <dt>Parent email</dt><dd data-draw="det" data-source="announce" data-field="parent_mail">—</dd>
+          <dt>Parent WhatsApp</dt><dd data-draw="det" data-source="announce" data-field="parent_whatsapp">—</dd>
+          <dt>SC calls · students</dt><dd data-draw="det" data-source="announce" data-field="sc_calls_students">—</dd>
+          <dt>SC calls · parents</dt><dd data-draw="det" data-source="announce" data-field="sc_calls_parents">—</dd>
+          <dt>Sent on</dt><dd data-draw="det" data-source="announce" data-field="sent_date">—</dd>
+          <dt>Sent on (Sheet9)</dt><dd data-draw="det" data-source="announce" data-field="sheet9_sent">—</dd>
+          <dt>Previous sem sign-off</dt><dd data-draw="det" data-source="announce" data-field="payment_signoff">—</dd>
+          <dt>Tracker remarks</dt><dd data-draw="det" data-source="announce" data-field="tracker_remarks">—</dd>
+          <dt>Fee collection link</dt><dd data-draw="det" data-source="announce" data-field="fee_link">—</dd>
+        </dl>
+        <dl>
+          <h4>Team</h4>
+          <dt>PM / COS</dt><dd data-draw="det" data-source="schedule" data-field="poc_name">—</dd>
+          <dt>Role</dt><dd data-draw="det" data-source="schedule" data-field="poc_role">—</dd>
+          <dt>Email</dt><dd data-draw="det" data-source="schedule" data-field="poc_email">—</dd>
+          <dt>Campus location</dt><dd data-draw="det" data-source="schedule" data-field="campus_location">—</dd>
+          <dt>Regional COS</dt><dd data-draw="det" data-source="schedule" data-field="regional_cos">—</dd>
+        </dl>
+        <dl>
+          <h4>Notes</h4>
+          <dt>Remarks</dt><dd data-draw="det" data-source="schedule" data-field="remarks">—</dd>
+          <dt>To double-check</dt><dd data-draw="det" data-source="schedule" data-field="issues">—</dd>
+        </dl>
+      </div>
+    </div>
+
+    <div class="nf-card">
+      <div class="nf-sec-head">
+        <h2 id="data-issues">Entries to double-check</h2>
+        <p class="nf-note">Likely typos in the sheets: a deadline before its start, a window over six months long, registration before the fee deadline, or a sent date in the future.</p>
+      </div>
+      <div class="nf-scroll nf-short">
+        <table data-source="issues" data-row-key="key">
+          <thead><tr>
+            <th data-field="university">University</th>
+            <th data-field="batch">Batch</th>
+            <th data-field="sheet">Sheet</th>
+            <th data-field="issue">What to check</th>
+          </tr></thead>
+          <tbody data-draw="issuesTable"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="nf-card">
+      <div class="nf-card-head">
+        <div class="nf-sec-head">
+          <h2 id="all-universities">All universities</h2>
+          <p class="nf-note">Sort by any column; select a row for the full profile.</p>
+        </div>
+        <input class="nf-search" type="search" placeholder="Search university, status, remark…" aria-label="Search universities">
+      </div>
+      <div class="nf-focusbar" hidden>
+        <span>Showing</span>
+        <b data-focus-label="open" hidden>open fee windows</b>
+        <b data-focus-label="closing14" hidden>windows closing within 14 days</b>
+        <b data-focus-label="opening30" hidden>windows opening within 30 days</b>
+        <b data-focus-label="pending" hidden>universities that haven’t shared fee dates</b>
+        <button class="nf-close nf-clear" type="button">Show all</button>
+      </div>
+      <div class="nf-scroll">
+        <table data-source="schedule" data-row-key="key" class="nf-sched">
+          <thead><tr>
+            <th data-field="university" class="nf-sortable">University</th>
+            <th data-field="batch" class="nf-sortable">Batch</th>
+            <th data-field="status" class="nf-sortable">Status</th>
+            <th data-field="window" class="nf-sortable">Fee window</th>
+            <th data-field="when" class="nf-sortable">When</th>
+            <th data-field="registration" class="nf-sortable nf-hide-narrow">Registration</th>
+            <th data-field="sop" class="nf-sortable">SOP phase</th>
+            <th data-field="reminder" class="nf-sortable nf-hide-narrow">Reminder</th>
+            <th data-field="poc" class="nf-sortable">PM / COS</th>
+            <th data-field="regional_cos" class="nf-sortable nf-hide-narrow">Regional COS</th>
+            <th data-field="remarks" class="nf-hide-narrow">Remarks</th>
+          </tr></thead>
+          <tbody data-draw="schedTable" class="nf-click"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="nf-card">
+      <div class="nf-card-head">
+        <div class="nf-sec-head">
+          <h2 id="timeline">Fee collection windows</h2>
+          <p class="nf-note">Each bar runs from the collection start date to the deadline; the dashed line is today. Select a bar for the university profile.</p>
+        </div>
+        <div class="nf-legend">
+          <span><i class="nf-sw nf-c-open"></i>Open</span>
+          <span><i class="nf-sw nf-c-up"></i>Upcoming</span>
+          <span><i class="nf-sw nf-c-closed"></i>Closed</span>
+        </div>
+      </div>
+      <div class="nf-chart" data-draw="timeline" data-source="schedule"></div>
+    </div>
+  </section>
+
+  <!-- CALENDAR -->
+  <section id="calendar" class="nf-page" hidden>
+    <div class="nf-card">
+      <div class="nf-card-head">
+        <div class="nf-sec-head">
+          <h2 id="calendar-table">Academic calendar and fee dates</h2>
+          <p class="nf-note">Every date column from both batch tabs, as written in the sheet. 2025 batch: current Sem 3, next Sem 4. 2026 batch: current Sem 1, next Sem 2.</p>
+        </div>
+      </div>
+      <div class="nf-scroll">
+        <table data-source="schedule" data-row-key="key">
+          <thead><tr>
+            <th data-field="university">University</th>
+            <th data-field="batch">Batch</th>
+            <th data-field="cur_sem">Sem</th>
+            <th data-field="sem_start">Starts</th>
+            <th data-field="sem_end">Ends</th>
+            <th data-field="next_sem">Next sem</th>
+            <th data-field="next_sem_start">Starts</th>
+            <th data-field="next_sem_end">Ends</th>
+            <th data-field="fee_start_text">Fee collection opens</th>
+            <th data-field="fee_end_text">Fee collection closes</th>
+            <th data-field="registration">Registration</th>
+            <th data-field="reminder">Reminder</th>
+          </tr></thead>
+          <tbody data-draw="calTable" class="nf-click"></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="nf-card">
+      <div class="nf-sec-head">
+        <h2 id="sheet-notes">Other entries in the sheets</h2>
+        <p class="nf-note">Cells outside the university rows, read live from the 2025 Batch tab.</p>
+      </div>
+      <table data-source="sheet_notes" data-row-key="key">
+        <thead><tr>
+          <th data-field="sheet">Tab</th>
+          <th data-field="column">Column</th>
+          <th data-field="value">Value</th>
+          <th data-field="note">Note</th>
+        </tr></thead>
+        <tbody data-draw="notesTable"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ANNOUNCEMENTS -->
+  <section id="announcements" class="nf-page" hidden>
+    <div class="nf-card">
+      <div class="nf-card-head">
+        <div class="nf-sec-head">
+          <h2 id="channels">Progress by channel</h2>
+          <p class="nf-note">Universities per channel, from the announcement trackers.</p>
+        </div>
+        <div class="nf-legend">
+          <span><i class="nf-sw nf-c-done"></i>Done</span>
+          <span><i class="nf-sw nf-c-prog"></i>In progress</span>
+          <span><i class="nf-sw nf-c-nd"></i>Not done</span>
+          <span><i class="nf-sw nf-c-ns"></i>Not started</span>
+        </div>
+      </div>
+      <div class="nf-stack" data-draw="channelBars" data-source="channels"></div>
+    </div>
+
+    <div class="nf-card">
+      <div class="nf-sec-head">
+        <h2 id="matrix">Tracker by university</h2>
+        <p class="nf-note">Universities with any activity first. Success coach calls, previous semester payment sign-off and fee collection link are tracked for the 2025 batch only.</p>
+      </div>
+      <div class="nf-scroll">
+        <table data-source="announce" data-row-key="key">
+          <thead><tr>
+            <th data-field="university">University</th>
+            <th data-field="batch">Batch</th>
+            <th data-field="state">Overall</th>
+            <th data-field="click_share_sheet">SC sheet</th>
+            <th data-field="student_app">Student app</th>
+            <th data-field="student_mail">Student email</th>
+            <th data-field="student_whatsapp">Student WhatsApp</th>
+            <th data-field="parent_app">Parent app</th>
+            <th data-field="parent_mail">Parent email</th>
+            <th data-field="parent_whatsapp">Parent WhatsApp</th>
+            <th data-field="sc_calls_students">SC calls · students</th>
+            <th data-field="sc_calls_parents">SC calls · parents</th>
+            <th data-field="sent_date">Sent on</th>
+            <th data-field="sheet9_sent">Sent on (Sheet9)</th>
+            <th data-field="payment_signoff">Previous sem sign-off</th>
+            <th data-field="fee_link">Fee collection link</th>
+          </tr></thead>
+          <tbody data-draw="matrixTable" class="nf-click"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- MESSAGES -->
+  <section id="messages" class="nf-page" hidden>
+    <div class="nf-card nf-template">
+      <div class="nf-card-head">
+        <div class="nf-sec-head">
+          <h2 id="announcement-message">Announcement message: Semester 4 registration</h2>
+          <p class="nf-note">Send this on the student app, the parent app and the click-and-share sheet for students and parents. Replace each &lt;Date&gt; before sending.</p>
+        </div>
+        <button type="button" class="nf-close nf-copy">Copy message</button>
+      </div>
+      <div class="nf-msg-meta">
+        <span class="nf-pill k-info">Student app</span>
+        <span class="nf-pill k-info">Parent app</span>
+        <span class="nf-pill k-info">Click and share · students</span>
+        <span class="nf-pill k-info">Click and share · parents</span>
+      </div>
+      <pre class="nf-msg-body nf-template-body">*Dear Students and Parents,*
+
+📢 *Semester 4 Registration – Important Update*
+
+⏰ This is a gentle reminder that Semester 4 Registration is scheduled to commence on *&lt;Date&gt;*. 
+
+📌 To ensure a smooth registration process, students are kindly requested to clear any pending fee payments in advance, as completion of fee payment is a prerequisite for registration.
+
+🎓 *Successful registration is mandatory to ensure access to the following:*
+✅ Section allocation  
+✅ Academic sessions  
+✅ Examination-related services 
+✅ GRIT, Skill Assessments etc.
+✅ LMS portal and other institutional services  
+
+📌 Please also note that attendance will be considered only for registered students from *&lt;&lt;Date&gt;&gt; onwards*, and maintaining a minimum of *80% attendance is mandatory*.
+
+🤝 We kindly request all students and parents to plan accordingly and complete the necessary formalities within the specified timeline to ensure a smooth academic experience.
+
+Thank you for your cooperation and support.
+
+Regards,
+Team NIAT</pre>
+    </div>
+    <div class="nf-card nf-template">
+      <div class="nf-card-head">
+        <div class="nf-sec-head">
+          <h2 id="email-message">Email message: Semester 4 registration</h2>
+          <p class="nf-note">Use this for the student mail and the parent mail. Replace each &lt;Date&gt; before sending.</p>
+        </div>
+        <button type="button" class="nf-close nf-copy">Copy message</button>
+      </div>
+      <div class="nf-msg-meta">
+        <span class="nf-pill k-info">Student mail</span>
+        <span class="nf-pill k-info">Parent mail</span>
+      </div>
+      <pre class="nf-msg-body nf-template-body">*Dear Students and Parents,*
+
+ *Semester 4 Registration – Important Update*
+
+ This is a gentle reminder that Semester 4 Registration is scheduled to commence on *&lt;Date&gt;*. 
+
+ To ensure a smooth registration process, students are kindly requested to clear any pending fee payments in advance, as completion of fee payment is a prerequisite for registration.
+
+ *Successful registration is mandatory to ensure access to the following:*
+✅ Section allocation  
+✅ Academic sessions  
+✅ Examination-related services 
+✅ GRIT, Skill Assessments etc.
+✅ LMS portal and other institutional services  
+
+ Please also note that attendance will be considered only for registered students from *&lt;&lt;Date&gt;&gt; onwards*, and maintaining a minimum of *80% attendance is mandatory*.
+
+ We kindly request all students and parents to plan accordingly and complete the necessary formalities within the specified timeline to ensure a smooth academic experience.
+
+Thank you for your cooperation and support.
+
+Regards,
+Team NIAT</pre>
+    </div>
+    <div class="nf-card">
+      <div class="nf-card-head">
+        <div class="nf-sec-head">
+          <h2 id="team">Campus PM and COS</h2>
+          <p class="nf-note">Who owns each campus, read live from the contacts sheet. “Fee sheet name” shows which university in the fee sheets each campus is linked to.</p>
+        </div>
+      </div>
+      <div class="nf-scroll nf-short">
+        <table data-source="people" data-row-key="key">
+          <thead><tr>
+            <th data-field="campus">Campus</th>
+            <th data-field="location" class="nf-hide-narrow">Location</th>
+            <th data-field="poc_name">PM / COS</th>
+            <th data-field="role">Role</th>
+            <th data-field="email">Email</th>
+            <th data-field="fee_sheet" class="nf-hide-narrow">Fee sheet name</th>
+          </tr></thead>
+          <tbody data-draw="peopleTable"></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="nf-card">
+      <div class="nf-sec-head">
+        <h2 id="leads">Regional COS and central team</h2>
+        <p class="nf-note">Regional COS and central team, from the All COS sheet. You see your own row; all-access users see everyone.</p>
+      </div>
+      <table data-source="regional_cos" data-row-key="name">
+        <thead><tr>
+          <th data-field="team">Team</th>
+          <th data-field="name">Name</th>
+          <th data-field="email">Email</th>
+          <th data-field="colleges">Colleges</th>
+        </tr></thead>
+        <tbody data-draw="leadsTable"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- PLAYBOOK -->
+  <section id="playbook" class="nf-page" hidden>
+    <div class="nf-card">
+      <div class="nf-sec-head"><h2>Semester fee collection and registration: SOP</h2><p class="nf-note">Applies to all universities and all semesters. Owner: Central Team. T0 is the official semester registration start date. Each university’s current phase is shown in the Universities tab.</p></div>
+      <ul class="nf-sop-list"><li>Universities must publish semester dates and fee collection timelines by T-60.</li><li>All universities must follow the approved timeline without deviation unless approved by the Central Team.</li><li>Standard communication templates provided by the Central Team must be used for all student and parent outreach.</li><li>All updates, commitments, and exceptions must be recorded in the central tracker.</li><li>Any escalation or exception must be logged on the same day.</li></ul><div class="nf-scroll"><table class="nf-sop"><thead><tr><th>Term</th><th>Definition</th></tr></thead><tbody><tr><td class="nf-strong nf-nowrap">T-Day (T0)</td><td class="act">Official semester registration start date</td></tr><tr><td class="nf-strong nf-nowrap">Paid Student</td><td class="act">Complete semester fee paid and verified by finance, Eligible for registration</td></tr><tr><td class="nf-strong nf-nowrap">At-Risk Student</td><td class="act">Student with outstanding dues requiring intervention</td></tr><tr><td class="nf-strong nf-nowrap">Written Confirmation</td><td class="act">Payment commitment received via WhatsApp, email, or SMS</td></tr></tbody></table></div>
+    </div>
+    <div class="nf-card">
+      <div class="nf-sec-head"><h2>Roles and responsibilities</h2><p class="nf-note">Fee collection and registration are centrally governed and must be run the same way at every university.</p></div>
+      <div class="nf-detail-grid"><dl><h4>COS / Success Coach</h4><dd style="grid-column:1/-1">• Follow up on fee payments</dd><dd style="grid-column:1/-1">• Record payment commitments</dd><dd style="grid-column:1/-1">• Flag at-risk students</dd><dd style="grid-column:1/-1">• Support registration activities</dd></dl><dl><h4>Program Manager (PM)</h4><dd style="grid-column:1/-1">• Owner for the university registration and fee collection process</dd><dd style="grid-column:1/-1">• Makes in-class announcements on fees and registration timelines</dd><dd style="grid-column:1/-1">• Gathers timelines and mode of payment, and supports students in the payment process</dd></dl><dl><h4>Finance Team</h4><dd style="grid-column:1/-1">• Verify payments</dd><dd style="grid-column:1/-1">• Generate payment links</dd><dd style="grid-column:1/-1">• Apply late fees where applicable</dd><dd style="grid-column:1/-1">• Share consolidated fee reports</dd></dl><dl><h4>Central Team</h4><dd style="grid-column:1/-1">• Own the fee collection process</dd><dd style="grid-column:1/-1">• Issue communications</dd><dd style="grid-column:1/-1">• Manage access control and exceptions</dd><dd style="grid-column:1/-1">• Monitor compliance across universities</dd></dl></div>
+    </div>
+    <div class="nf-card">
+      <div class="nf-sec-head"><h2>Phase A: Planning and set-up (T-60 to T-54)</h2></div>
+      <div class="nf-scroll"><table class="nf-sop"><thead><tr><th>Step</th><th>When</th><th>Action</th><th>Owner</th><th>Execution POC</th><th>Output</th></tr></thead><tbody><tr><td class="nf-strong nf-nowrap">A1</td><td class="">T-60</td><td class="act">Obtain from the University: next semester start date, fee collection start date, registration start date, class start date</td><td class="">COS</td><td class="">PM</td><td class="">Dates shared with Central Team</td></tr><tr><td class="nf-strong nf-nowrap">A2</td><td class="">T-59 to T-55</td><td class="act">Confirm each student&#x27;s previous semester dues and upcoming dues; generate payment links; sign off the semester fee plan</td><td class="">Finance</td><td class="">PM</td><td class="">Signed-off dues list and payment links</td></tr><tr><td class="nf-strong nf-nowrap">A3</td><td class="">T-54</td><td class="act">Enable the payment process for the semester; publish the dated calendar to all 40 universities</td><td class="">Central Team</td><td class="">Central Team</td><td class="">Payment live; calendar published</td></tr></tbody></table></div>
+    </div>
+    <div class="nf-card">
+      <div class="nf-sec-head"><h2>Phase B: First contact and announcements (T-54 to T-45)</h2><p class="nf-note">Students give their dates on different days, so B1 and B2 continue until every student has a recorded method and date</p></div>
+      <div class="nf-scroll"><table class="nf-sop"><thead><tr><th>Step</th><th>When</th><th>Action</th><th>Owner</th><th>Execution POC</th><th>Output</th></tr></thead><tbody><tr><td class="nf-strong nf-nowrap">B1</td><td class="">T-54 to T-46</td><td class="act">The Success Coach calls every student and parent. Record the payment method (UPI, bank transfer, cash, loan, post-dated cheque, other) and the committed payment date, Get payment timeline from each student or parent on whatsapp or on call</td><td class="">PM</td><td class="">Success Coach</td><td class="">Method and date in tracker for every student</td></tr><tr><td class="nf-strong nf-nowrap">B2</td><td class="">T-54</td><td class="act">Send registration reminder to students: Student App, email</td><td class="">Central Team</td><td class="">Central Team</td><td class="">Announcement sent</td></tr><tr><td class="nf-strong nf-nowrap">B3</td><td class="">T-54</td><td class="act">Send registration reminder to parents: email</td><td class="">Central Team</td><td class="">Central Team</td><td class="">Announcement sent</td></tr><tr><td class="nf-strong nf-nowrap">B4</td><td class="">T-50 to T-46</td><td class="act">Reminder call and WhatsApp Success Coach message to students not yet reached or not yet confirmed</td><td class="">PM</td><td class="">Success Coach</td><td class="">Tracker updated</td></tr><tr><td class="nf-strong nf-nowrap">B5</td><td class="">Optional</td><td class="act">Parent-teacher meeting on fees, only if approved by Central Team</td><td class="">Check</td><td class="">Check</td><td class="">Approved and scheduled, or not held</td></tr></tbody></table></div>
+    </div>
+    <div class="nf-card">
+      <div class="nf-sec-head"><h2>Phase C: Early collection (T-45 to T-31)</h2></div>
+      <div class="nf-scroll"><table class="nf-sop"><thead><tr><th>Step</th><th>When</th><th>Action</th><th>Owner</th><th>Output</th></tr></thead><tbody><tr><td class="nf-strong nf-nowrap">C1</td><td class="">T-45</td><td class="act">Follow-up 1: In-class announcement on fee and registration timelines</td><td class="">PM</td><td class="">Announcement done in every section</td></tr><tr><td class="nf-strong nf-nowrap">C2</td><td class="">T-44 to T-31</td><td class="act">Follow-up 2: Call students and parents Confirm timelines via recorded call or Whatsapp msg,track partial payments, loan progress and financial dependencies</td><td class="">COS</td><td class="">Tracker updated twice weekly</td></tr></tbody></table></div>
+    </div>
+    <div class="nf-card">
+      <div class="nf-sec-head"><h2>Phase D: Mid-cycle and risk identification (T-30 to T-16)</h2></div>
+      <div class="nf-scroll"><table class="nf-sop"><thead><tr><th>Step</th><th>When</th><th>Action</th><th>Owner</th><th>Output</th></tr></thead><tbody><tr><td class="nf-strong nf-nowrap">D1</td><td class="">T-30</td><td class="act">Follow-up 3: In-class announcement on fee and registration timelines, A written confirmation from the students on a circular mentioning the date of confirmation payment.</td><td class="">PM</td><td class="">Announcement done in every section</td></tr><tr><td class="nf-strong nf-nowrap">D2</td><td class="">T-30 to T-16</td><td class="act">Calls and Whatsapp to unpaid students twice a week for Success Coach</td><td class="">COS</td><td class="">Tracker updated</td></tr><tr><td class="nf-strong nf-nowrap">D3</td><td class="">T-30 to T-16</td><td class="act">Track payments received; grant portal access to paid students</td><td class="">Finance Team (tracking), Central Team (access)</td><td class="">Daily paid list; access granted</td></tr><tr><td class="nf-strong nf-nowrap">D4</td><td class="">T-15</td><td class="act">Flag at-risk students (Section 4); update loan cases and take 1-1 Meets</td><td class="">PM</td><td class="">At-risk list shared with COS &amp; Central Team</td></tr></tbody></table></div>
+    </div>
+    <div class="nf-card">
+      <div class="nf-sec-head"><h2>Phase E: Enforcement and final reminders (T-15 to T0)</h2></div>
+      <div class="nf-scroll"><table class="nf-sop"><thead><tr><th>Step</th><th>When</th><th>Action</th><th>Owner</th><th>Output</th></tr></thead><tbody><tr><td class="nf-strong nf-nowrap">E1</td><td class="">T-15</td><td class="act">Send portal expiry in app &amp; push notifications in the LMS portal, Student App, Parent App</td><td class="">Central Team</td><td class="">Access blocked; list logged</td></tr><tr><td class="nf-strong nf-nowrap">E2</td><td class="">T-15</td><td class="act">Send formal fee reminder and announcement to students and parents via success coaches</td><td class="">Central + COS</td><td class="">Reminder sent</td></tr><tr><td class="nf-strong nf-nowrap">E3</td><td class="">T-15 to T-8</td><td class="act">Follow-up 4: Reminder calls and WhatsApp messages to all unpaid students Via Success Coach</td><td class="">COS</td><td class="">Tracker updated</td></tr><tr><td class="nf-strong nf-nowrap">E4</td><td class="">T-15 to T-8</td><td class="act">Follow-up 5: Call and message at-risk students twice a week Via success coach ; record progress</td><td class="">Central + COS</td><td class="">At-risk tracker updated</td></tr><tr><td class="nf-strong nf-nowrap">E5</td><td class="">T-7</td><td class="act">Send final reminder to students and parents
+-Notification on Parent App via Central
+-Notification on Student App via Central
+-Mail to Students Via Central
+-Call to Parent and Students via Success Coach
+WhatsApp Msg to Parents and Students via Success Coach</td><td class="">Central + COS</td><td class="">Final reminder sent</td></tr><tr><td class="nf-strong nf-nowrap">E6</td><td class="">T-7 to T0</td><td class="act">Get a written payment timeline for every unpaid case
+-Over Whatsapp or
+-Call with recording</td><td class="">COS</td><td class="">Written timeline on file for 100% of unpaid cases</td></tr><tr><td class="nf-strong nf-nowrap">E7</td><td class="">T-7 to T0</td><td class="act">Call and message at-risk students twice a week; record progress</td><td class="">COS</td><td class="">At-risk tracker updated</td></tr></tbody></table></div>
+    </div>
+    <div class="nf-card">
+      <div class="nf-sec-head"><h2>Phase F: Post-start registration and recovery (T0 to T+15 and after)</h2></div>
+      <div class="nf-scroll"><table class="nf-sop"><thead><tr><th>Step</th><th>When</th><th>Action</th><th>Owner</th><th>Output</th></tr></thead><tbody><tr><td class="nf-strong nf-nowrap">F1</td><td class="">T0 to T15</td><td class="act">Issue registration certificate and ID sticker to paid students; complete section allocation</td><td class="">COS</td><td class="">All paid students registered and allocated</td></tr><tr><td class="nf-strong nf-nowrap">F2</td><td class="">T0 to T7</td><td class="act">Continue follow-up and payment reconciliation. Do not mark attendance or provide institute services to unpaid students without an approved exception, as per legal guidance</td><td class="">COS</td><td class="">Reconciliation done; no services to unpaid students</td></tr><tr><td class="nf-strong nf-nowrap">F3</td><td class="">T0</td><td class="act">Remove LMS Access if fee is not made &amp; Registration is pending</td><td class="">Central Team</td><td class="">Access restored same day</td></tr><tr><td class="nf-strong nf-nowrap">F4</td><td class="">T+15</td><td class="act">Review overdue loan disbursements, broken commitments, revised timelines and new payment methods and implement the consequence action items</td><td class="">Central + COS</td><td class="">Review notes and revised timelines</td></tr><tr><td class="nf-strong nf-nowrap">F5</td><td class="">After T+15</td><td class="act">Apply 5% late fee to unpaid balances</td><td class="">Finance Team</td><td class="">Late fee applied</td></tr><tr><td class="nf-strong nf-nowrap">F6</td><td class="">After T+15</td><td class="act">Inform over circular or mail to the student that fee is blocked</td><td class="">Central Team</td><td class="">Block applied and logged</td></tr></tbody></table></div>
+    </div>
+    <div class="nf-card">
+      <div class="nf-sec-head"><h2>Exceptions and records</h2></div>
+      <p class="nf-note">Exceptions. Only the Central Team can approve an exception. Universities on ground team cannot grant access, waive the late fee or mark attendance for an unpaid student on their own.</p><p class="nf-note">Records. Keep for every student: payment method, committed date, written confirmation, every follow-up date and outcome, and any exception approval.</p>
+    </div>
+    <div class="nf-card">
+      <div class="nf-sec-head"><h2>Rules for unpaid students and late fees</h2><p class="nf-note">The SOP is inconsistent on late fees: step F5 says 5% after T+15, while this table says 5% from T+7 to T+14 and 10% from T+15. Confirm with the Central Team.</p></div>
+      <div class="nf-scroll"><table class="nf-sop"><thead><tr><th>Actions</th><th>Applies from</th><th>Owner</th></tr></thead><tbody><tr><td class="act">Display Registration Pending List over the campus notice board (high Impact) (To be checked with Legal Team)</td><td class="">T0</td><td class="">PM &amp; COS</td></tr><tr><td class="act">Portal / LMS blocked for unpaid students with no approved exception</td><td class="">T0</td><td class="">Central Team</td></tr><tr><td class="act">No student is allowed to sit in the classroom and no attendance has to be marked and no institute services will be provided for unpaid &amp; students can&#x27;t sit for exams (To be checked with Legal Team)</td><td class="">T0</td><td class="">PM &amp; COS</td></tr><tr><td class="act">Taking a post dated cheque</td><td class="">T0</td><td class="">PM &amp; COS</td></tr><tr><td class="act">No Part in Events, Co-curricular &amp; extra curricular activities</td><td class="">T0</td><td class="">PM &amp; COS</td></tr><tr><td class="act">Take post dated cheque (To be checked with Legal Team)</td><td class="">T0</td><td class="">PM &amp; COS</td></tr><tr><td class="act">5% late fee on the unpaid balance</td><td class="">T+7 to T+14</td><td class="">Finance Team</td></tr><tr><td class="act">10% late fee on the unpaid balance</td><td class="">T+15 and above</td><td class="">Finance Team</td></tr></tbody></table></div>
+    </div>
+    <div class="nf-card">
+      <div class="nf-sec-head"><h2>Escalation matrix</h2><p class="nf-note">The COS / Success Coach owns student follow-up, the PM coordinates university-level action, and the Central Team approves exceptions and policy deviations.</p></div>
+      <div class="nf-scroll"><table class="nf-sop"><thead><tr><th>Timeline / Trigger</th><th>Escalation Action &amp; Response Time</th><th>Owner</th><th>Required Action / Outcome</th></tr></thead><tbody><tr><td class="act">By T-54: Semester dates, fee amount, student dues, or payment links are missing or inconsistent</td><td class="act">Escalate to Central the same business day</td><td class="">COS/ PM to Central Team</td><td class="act">Confirm source data, assign resolution owner, and resolve discrepancies before publishing any fee due date or amount.</td></tr><tr><td class="act">By T-46: Student or parent not reached, or payment method/timeline missing</td><td class="act">Escalate after the reminder call/message; update tracker the same day</td><td class="">Success Coach → PM</td><td class="act">Make another contact attempt via message &amp; call, record the outcome, and assign the next follow-up date.</td></tr><tr><td class="act">T-44 to T-31: Student misses committed payment date, makes a partial payment, or reports a loan/dependency issue</td><td class="act">Escalate after a missed commitment or unresolved issue; review at least twice weekly</td><td class="">Success Coach → PM</td><td class="act">Verify balance with Finance, contact student and parent, take written commitment, and flag intervention cases.</td></tr><tr><td class="act">By T-30: No reliable payment timeline, repeated missed commitments, or unresolved loan/disbursement issue</td><td class="act">Escalate to PM within one business day</td><td class="">COS / Success Coach → PM</td><td class="act">Add learner to the at-risk list, complete case review, and document payment plan, loan status, next action, and owner.</td></tr><tr><td class="act">At T-15: Student remains unpaid or is identified as at risk</td><td class="act">Escalate at-risk list to Central; review within one business day</td><td class="">PM → Central Team</td><td class="act">Central reviews the case, evaluates exception requests if applicable, and formal reminder is issued.</td></tr><tr><td class="act">By T-7: No written payment timeline available</td><td class="act">Escalate to Central the same business day</td><td class="">COS / Success Coach → PM → Central Team</td><td class="act">Make final student/parent contact, record the response, and include the case in the final unpaid roster.</td></tr><tr><td class="act">At T0: Fee remains unpaid and no approved exception exists</td><td class="act">Escalate before registration or access action</td><td class="">Finance → Central Team; COS coordinates communication</td><td class="act">Finance confirms outstanding balance. Central authorizes holds/restrictions. COS communicates outcome and next steps.</td></tr><tr><td class="act">T0 to T+7: Payment claimed but not matched, balance disputed, or access action appears incorrect</td><td class="act">Refer to Finance immediately; review within one business day</td><td class="">COS / Student → Finance → Central Team</td><td class="act">Validate transaction and ledger, record decision, and correct balance or access status if required.</td></tr><tr><td class="act">At T+7: Balance remains unpaid</td><td class="act">Apply approved first late-fee tier and notify student</td><td class="">Finance Team; Central Team Oversight</td><td class="act">Calculate approved late fee, update outstanding balance, and record notice sent to student.</td></tr><tr><td class="act">At T+15 and beyond: Balance remains unpaid, loan disbursement delayed, or written commitment broken</td><td class="act">Escalate to Central and review overdue cases</td><td class="">Finance / COS → Central Team</td><td class="act">Reconfirm balance, assess loan/payment-plan status, apply approved next consequence, and notify students.</td></tr><tr><td class="act">Any Time: Student requests hardship support, payment plan, or exception</td><td class="act">Escalate to Central before changing standard rules</td><td class="">COS / PM → Central Team</td><td class="act">Submit case details and requested terms. Record written decision, conditions, approver, and expiry date.</td></tr><tr><td class="act">Any Time: University proposes a different timeline, fee, late-fee rule, or restriction</td><td class="act">Obtain Central approval before implementation</td><td class="">PM → Central Team</td><td class="act">Log request, approval decision, and update tracker. No deviation should be applied without approval.</td></tr></tbody></table></div>
+    </div>
+    <div class="nf-card">
+      <div class="nf-sec-head"><h2>Record for every escalation</h2></div>
+      <p class="nf-note">Student Name · Student University ID · Student NxtWave UID · Trigger Date · Outstanding Amount · Contact Attempts Made · Escalation Decision · Next Action · Target Completion Date · Approval Reference (if applicable) · Exception Details (if any)</p>
+    </div>
+  </section>
+
+  <details class="nf-foot">
+    <summary>How statuses are worked out, and where the data comes from</summary>
+    <dl>
+      <dt>Open</dt><dd>Today is on or after the fee collection start date and on or before the deadline.</dd>
+      <dt>Upcoming</dt><dd>The fee collection start date is after today.</dd>
+      <dt>Closed</dt><dd>The deadline has passed.</dd>
+      <dt>Dates pending</dt><dd>No exact start or end date yet (“Yet to decide”, “3rd week of Dec”, blank).</dd>
+      <dt>Check dates</dt><dd>The deadline is before the start date, usually a wrong year.</dd>
+      <dt>No announcement sent</dt><dd>Open, or opening within 30 days, with every channel in the tracker blank.</dd>
+      <dt>Sources</dt><dd>The fee sheets, trackers and contacts are loaded into the database by the import script. You only see the universities linked to your email.</dd>
+    </dl>
+  </details>
+</div>
+
+<script>
+  // Shared helpers
+  window.nf = {
+    sel: null,
+    focus: null,
+    watch: 'all',
+    batch: () => String((dash.params() || {}).batch || 'all'),
+    inBatch: (r) => { const b = window.nf.batch(); return b === 'all' || r.batch === b; },
+    failed: (el, d) => {
+      if (d.status === 'error' || d.status === 'connect') {
+        el.classList.remove('dash-skeleton');
+        const p = document.createElement('div'); p.className = 'nf-fail'; p.textContent = 'Failed to load';
+        el.replaceChildren(p);
+        return true;
+      }
+      return false;
+    },
+    td: (tr, text, cls) => { const td = document.createElement('td'); td.textContent = text == null ? '' : String(text); if (cls) td.className = cls; tr.append(td); return td; },
+    pillTd: (tr, text, kind, cls) => { const td = document.createElement('td'); if (cls) td.className = cls; const s = document.createElement('span'); s.className = 'nf-pill k-' + kind; s.textContent = text; td.append(s); tr.append(td); return td; },
+    statusKind: (s) => ({ 'Open': 'ok', 'Upcoming': 'info', 'Closed': 'muted', 'Dates pending': 'warn', 'Check dates': 'bad' })[s] || 'muted',
+    chanKind: (s) => ({ 'Done': 'ok', 'Shared': 'ok', 'All sent': 'ok', 'Given': 'ok', 'In Progress': 'info', 'Partly sent': 'info', 'Not Done': 'bad', 'Not started': 'muted', 'Not tracked': 'muted' })[s] || 'muted',
+    signKind: (s) => { const v = String(s || '').toLowerCase(); return v === 'done' ? 'ok' : v.includes('dispute') ? 'bad' : v.startsWith('in progress') ? 'info' : v.startsWith('need') ? 'warn' : 'muted'; },
+    planKind: (s) => ({ 'Yes': 'ok', 'No': 'bad', 'Approval pending': 'warn', 'Not marked': 'muted', 'Not applicable': 'muted' })[s] || 'muted',
+  };
+  document.querySelectorAll('.nf').forEach((el) => {
+    el.style.setProperty('--nf-open', dash.colors[0]);
+    el.style.setProperty('--nf-up', dash.colors[1]);
+  });
+</script>
+
+<script>
+  // Tabs, batch filter and university selection
+  const tabs = ['overview', 'universities', 'calendar', 'announcements', 'messages', 'playbook'];
+  const show = (name) => {
+    document.querySelectorAll('.nf-page').forEach((s) => { s.hidden = s.id !== name; });
+    document.querySelectorAll('.nf-tab').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.tab === name)));
+    dash.setLink(name);
+  };
+  document.querySelectorAll('.nf-tab').forEach((b) => b.addEventListener('click', () => show(b.dataset.tab)));
+  const start = location.hash.slice(1);
+  if (tabs.includes(start)) show(start);
+  document.querySelectorAll('.nf-batch').forEach((sel) => {
+    sel.value = window.nf.batch();
+    sel.addEventListener('change', () => {
+      dash.setParams({ batch: sel.value });
+      document.querySelectorAll('.nf-batch').forEach((o) => { o.value = sel.value; });
+    });
+  });
+  window.nf.select = (key) => {
+    if (!key) return;
+    window.nf.sel = key;
+    show('universities');
+    document.querySelectorAll('.nf-detail').forEach((c) => { c.hidden = false; });
+    dash.draw('det');
+    document.querySelectorAll('.nf-detail').forEach((c) => c.scrollIntoView({ block: 'start', behavior: 'smooth' }));
+  };
+  document.querySelectorAll('tbody.nf-click').forEach((tb) => tb.addEventListener('click', (e) => {
+    const tr = e.target.closest('tr[data-key]');
+    if (tr) window.nf.select(tr.dataset.key);
+  }));
+  const setBatch = (b) => {
+    dash.setParams({ batch: b });
+    document.querySelectorAll('.nf-batch').forEach((o) => { o.value = b; });
+  };
+  const setFocus = (f) => {
+    window.nf.focus = f && f !== 'all' ? f : null;
+    document.querySelectorAll('.nf-focusbar').forEach((bar) => { bar.hidden = !window.nf.focus; });
+    document.querySelectorAll('[data-focus-label]').forEach((l) => { l.hidden = l.dataset.focusLabel !== window.nf.focus; });
+    dash.draw('schedTable');
+  };
+  const flash = (el) => { el.classList.remove('nf-flash'); void el.offsetWidth; el.classList.add('nf-flash'); el.scrollIntoView({ block: 'start', behavior: 'smooth' }); };
+  const setWatch = (w) => {
+    window.nf.watch = w;
+    document.querySelectorAll('.nf-segbtn').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.watch === w)));
+    dash.draw('watchTable');
+  };
+  document.querySelectorAll('.nf-segbtn').forEach((b) => b.addEventListener('click', () => setWatch(b.dataset.watch)));
+  const openTile = (tile, e) => {
+    const sub = e && e.target.closest('[data-batch]');
+    if (sub) setBatch(sub.dataset.batch);
+    const f = tile.dataset.focus;
+    if (f === 'at_risk') {
+      setWatch('gap');
+      show('overview');
+      document.querySelectorAll('#attention').forEach((h) => { const card = h.closest('.nf-card'); if (card) flash(card); });
+      return;
+    }
+    setFocus(f);
+    show('universities');
+    document.querySelectorAll('#all-universities').forEach((h) => { const card = h.closest('.nf-card'); if (card) flash(card); });
+  };
+  document.querySelectorAll('.nf-tile[data-focus]').forEach((tile) => {
+    tile.addEventListener('click', (e) => openTile(tile, e));
+    tile.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openTile(tile, e); } });
+  });
+  document.querySelectorAll('.nf-copy').forEach((b) => b.addEventListener('click', async () => {
+    const body = b.closest('.nf-card').querySelector('.nf-template-body');
+    if (!body) return;
+    try { await navigator.clipboard.writeText(body.textContent); b.textContent = 'Copied'; }
+    catch (e) { const r = document.createRange(); r.selectNodeContents(body); const s = getSelection(); s.removeAllRanges(); s.addRange(r); b.textContent = 'Selected – press Ctrl+C'; }
+    setTimeout(() => { b.textContent = 'Copy message'; }, 2000);
+  }));
+  document.querySelectorAll('.nf-clear').forEach((b) => b.addEventListener('click', () => setFocus(null)));
+  document.querySelectorAll('.nf-close:not(.nf-clear)').forEach((b) => b.addEventListener('click', () => {
+    window.nf.sel = null;
+    document.querySelectorAll('.nf-detail').forEach((c) => { c.hidden = true; });
+  }));
+</script>
+
+<script>
+  // Data arrives already as rows from the database (see app.js).
+
+  dash.calc('people', {
+    title: 'Campus PM and COS',
+    description: 'Each campus’s PM or COS from the contacts sheet, with the fee-sheet university it is linked to.',
+    inputs: ['contacts'],
+    fn: (contacts) => {
+      const rows = contacts.filter((r) => r.campus);
+      const emailNames = new Map();
+      rows.forEach((r) => { const e = String(r.email || '').toLowerCase(); if (!e) return; emailNames.set(e, new Set([...(emailNames.get(e) || []), String(r.poc_name || '').trim()])); });
+      return rows.map((r) => {
+        const campus = r.campus.replace(/\s+/g, ' ').trim();
+        const name = String(r.poc_name || '').replace(/\s+/g, ' ').trim();
+        const others = [...(emailNames.get(String(r.email || '').toLowerCase()) || [])].filter((n) => n !== name);
+        return {
+          key: campus, campus, location: r.location, poc_name: name, role: r.role, email: r.email,
+          university: r.university || '', fee_sheet: r.university || 'Not in fee sheets',
+          email_issue: others.length ? `Same email as ${others.join(', ')}` : '',
+        };
+      });
+    },
+  });
+
+  dash.calc('schedule', {
+    title: 'Fee windows by university',
+    description: 'Each university’s fee collection window read from the date text, with its status as of today and every date column as written.',
+    inputs: ['dates_2025', 'dates_2026', 'people', 'uni_meta'],
+    fn: (dates_2025, dates_2026, people, uni_meta) => {
+      const norm = (x) => String(x || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+      const byUni = new Map(people.filter((p) => p.university).map((p) => [norm(p.university), p]));
+      const regional = new Map(uni_meta.map((m) => [m.university, m.regional_cos]));
+      const MO = { jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5, jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11 };
+      const MN = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      const SEM = { '2025': ['Sem 3', 'Sem 4'], '2026': ['Sem 1', 'Sem 2'] };
+      const DAY = 86400000;
+      const now = new Date();
+      const today = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
+      const parse = (t) => {
+        for (const m of String(t || '').matchAll(/(\d{1,2})(?:st|nd|rd|th)?\s+([A-Za-z]{3,9})\s+(\d{4})/g)) {
+          const mo = MO[m[2].slice(0, 3).toLowerCase()];
+          if (mo !== undefined) return Date.UTC(+m[3], mo, +m[1]);
+        }
+        const n = String(t || '').match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+        if (n && +n[2] >= 1 && +n[2] <= 12) return Date.UTC(+n[3], +n[2] - 1, +n[1]);
+        return null;
+      };
+      const fmt = (t) => { const d = new Date(t); return `${d.getUTCDate()} ${MN[d.getUTCMonth()]} ${d.getUTCFullYear()}`; };
+      const iso = (t) => (t == null ? '' : new Date(t).toISOString().slice(0, 10));
+      const keep = (x) => String(x || '').replace(/[ \t]+/g, ' ').replace(/ *\n */g, '\n').trim();
+      const clean = (x) => String(x || '').replace(/\s+/g, ' ').trim();
+      const out = [];
+      [['2025', dates_2025], ['2026', dates_2026]].forEach(([batch, rows]) => rows.forEach((r) => {
+        const university = clean(r.university);
+        if (!university) return;
+        const st = clean(r.fee_start); const en = clean(r.fee_end);
+        const s = parse(st); const e = parse(en); const reg = parse(r.registration);
+        const issues = [];
+        if (s != null && e != null && e < s) issues.push('Deadline is before the start date');
+        if (s != null && e != null && e - s > 183 * DAY) issues.push('Window is longer than six months; check the year');
+        if (reg != null && e != null && reg < e && (s == null || e >= s)) issues.push('Registration date is before the fee deadline');
+        let status;
+        if (s != null && e != null && e < s) status = 'Check dates';
+        else if (s == null && e == null) status = 'Dates pending';
+        else if (s != null && s > today) status = 'Upcoming';
+        else if (e != null && e < today) status = 'Closed';
+        else status = 'Open';
+        const days_left = e != null && (status === 'Open' || status === 'Upcoming') ? Math.round((e - today) / DAY) : null;
+        const days_to_open = status === 'Upcoming' ? Math.round((s - today) / DAY) : null;
+        const pl = (n) => `${n} day${n === 1 ? '' : 's'}`;
+        let when = '';
+        if (status === 'Open') when = days_left == null ? 'Open, no deadline set' : days_left === 0 ? 'Closes today' : `Closes in ${pl(days_left)}`;
+        if (status === 'Upcoming') when = `Opens in ${pl(days_to_open)}`;
+        if (status === 'Closed') when = `Closed ${pl(Math.round((today - e) / DAY))} ago`;
+        const side = (t, txt) => (t != null ? fmt(t) : (txt && txt !== '-' ? txt : '?'));
+        const raw = [st, en].filter((x) => x && x !== '-');
+        const win = s != null || e != null ? `${side(s, st)} – ${side(e, en)}` : (raw.length ? [...new Set(raw)].join(' – ') : 'Not shared yet');
+        const dTo = reg != null ? Math.round((reg - today) / DAY) : null;
+        const PH = dTo == null ? null : dTo >= 55 ? 'A' : dTo >= 45 ? 'B' : dTo >= 31 ? 'C' : dTo >= 16 ? 'D' : dTo >= 1 ? 'E' : 'F';
+        const tLab = dTo == null ? '' : dTo > 0 ? `T-${dTo}` : dTo === 0 ? 'T0' : `T+${-dTo}`;
+        const sop = dTo == null ? '—' : dTo > 60 ? `${tLab} · Not started` : `${tLab} · Phase ${PH}`;
+        out.push({
+          key: `${batch} · ${university}`, batch, university, status, window: win, sop, tday: dTo,
+          start: iso(s), end: iso(e), deadline: e != null ? fmt(e) : '', when, days_left, days_to_open,
+          registration: keep(r.registration),
+          reminder: clean(r.reminder_status) || 'Not given', remarks: keep(r.remarks), issues: issues.join('; '),
+          ...(() => {
+            const p = byUni.get(norm(university));
+            const reg = regional.get(university) || '';
+            return {
+              poc: p ? `${p.poc_name} (${p.role})` : 'Not assigned', poc_name: p ? p.poc_name : '', poc_role: p ? p.role : '',
+              poc_email: p ? p.email : '', campus_location: p ? p.location : '', regional_cos: reg,
+            };
+          })(),
+          cur_sem: SEM[batch][0], sem_start: keep(r.sem_start), sem_end: keep(r.sem_end),
+          next_sem: SEM[batch][1], next_sem_start: keep(r.next_sem_start), next_sem_end: keep(r.next_sem_end),
+          fee_start_text: keep(r.fee_start), fee_end_text: keep(r.fee_end),
+        });
+      }));
+      return out;
+    },
+  });
+
+  dash.calc('announce', {
+    title: 'Announcement status by university',
+    description: 'Each university’s announcement channels from the trackers, with blanks read as not started.',
+    inputs: ['tracker_2025', 'tracker_2026', 'sheet9'],
+    fn: (tracker_2025, tracker_2026, sheet9) => {
+      const nrm = (x) => String(x || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+      const s9 = new Map(sheet9.map((r) => [nrm(r.university), String(r.sent_date || '').trim()]));
+      const CH = ['student_app', 'student_mail', 'student_whatsapp', 'parent_app', 'parent_mail', 'parent_whatsapp'];
+      const MO = { jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5, jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11 };
+      const now = new Date();
+      const today = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
+      const sent = (t) => {
+        let m = String(t || '').match(/(\d{1,2})(?:st|nd|rd|th)?[-\s]+([A-Za-z]{3})[A-Za-z]*[-\s]+(\d{4})/);
+        if (m && MO[m[2].toLowerCase()] !== undefined) return Date.UTC(+m[3], MO[m[2].toLowerCase()], +m[1]);
+        m = String(t || '').match(/(\d{1,2})-(\d{1,2})-(\d{4})/);
+        return m ? Date.UTC(+m[3], +m[2] - 1, +m[1]) : null;
+      };
+      const out = [];
+      [['2025', tracker_2025], ['2026', tracker_2026]].forEach(([batch, rows]) => rows.forEach((r) => {
+        const university = String(r.university || '').trim();
+        if (!university) return;
+        const o = { key: `${batch} · ${university}`, batch, university, click_share_sheet: String(r.click_share_sheet || '').trim() || 'Not started' };
+        CH.forEach((c) => { o[c] = String(r[c] || '').trim() || 'Not started'; });
+        ['sc_calls_students', 'sc_calls_parents'].forEach((c) => { o[c] = batch === '2025' ? (String(r[c] || '').trim() || 'Not started') : 'Not tracked'; });
+        o.payment_signoff = batch === '2025' ? (String(r.payment_signoff || '').trim() || 'Not started') : 'Not tracked';
+        o.fee_link = batch === '2025' ? String(r.fee_link || '').trim() : 'Not tracked';
+        o.tracker_remarks = batch === '2025' ? String(r.remarks || '').trim() : '';
+        o.done = CH.filter((c) => o[c] === 'Done').length;
+        o.in_progress = CH.filter((c) => o[c] === 'In Progress').length;
+        o.not_done = CH.filter((c) => o[c] === 'Not Done').length;
+        o.state = o.done === CH.length ? 'All sent' : o.done > 0 ? 'Partly sent' : 'Not started';
+        o.sent_date = String(r.sent_date || '').trim();
+        const t = sent(o.sent_date);
+        o.sent_issue = t != null && t > today ? 'Announcement sent date is in the future' : '';
+        o.sheet9_sent = batch === '2025' ? (s9.has(nrm(university)) ? (s9.get(nrm(university)) || '(blank)') : 'Not in Sheet9') : 'Not tracked';
+        o.sheet9_issue = batch === '2025' && s9.has(nrm(university)) && o.sheet9_sent !== o.sent_date ? `Sheet9 shows “${o.sheet9_sent}” but the tracker shows “${o.sent_date || '(blank)'}”` : '';
+        out.push(o);
+      }));
+      return out;
+    },
+  });
+
+  dash.calc('channels', {
+    title: 'Announcement progress by channel',
+    description: 'How many universities are done, in progress, not done or not started on each channel.',
+    inputs: ['announce'],
+    fn: (announce) => {
+      const CH = [['student_app', 'Student app'], ['student_mail', 'Student email'], ['student_whatsapp', 'Student WhatsApp'], ['parent_app', 'Parent app'], ['parent_mail', 'Parent email'], ['parent_whatsapp', 'Parent WhatsApp']];
+      const out = [];
+      ['All', '2025', '2026'].forEach((batch) => {
+        const s = announce.filter((r) => batch === 'All' || r.batch === batch);
+        CH.forEach(([f, channel]) => {
+          const c = (v) => s.filter((r) => r[f] === v).length;
+          out.push({ key: `${batch} · ${channel}`, batch, channel, done: c('Done'), in_progress: c('In Progress'), not_done: c('Not Done'), not_started: c('Not started'), universities: s.length });
+        });
+      });
+      return out;
+    },
+  });
+
+  dash.calc('gaps', {
+    title: 'Open windows with no announcement',
+    description: 'Fee windows open now or opening within 30 days where no announcement channel has started.',
+    inputs: ['schedule', 'announce'],
+    fn: (schedule, announce) => {
+      const state = new Map(announce.map((a) => [a.key, a.state]));
+      return schedule
+        .filter((r) => (r.status === 'Open' || (r.status === 'Upcoming' && r.days_to_open <= 30)) && (state.get(r.key) || 'Not started') === 'Not started')
+        .map((r) => ({ key: r.key, batch: r.batch, university: r.university, status: r.status, window: r.window, when: r.when, days: r.status === 'Open' ? r.days_left : r.days_to_open }))
+        .sort((a, b) => (a.days ?? 0) - (b.days ?? 0));
+    },
+  });
+
+  dash.calc('watchlist', {
+    title: 'Fee windows to watch',
+    description: 'Fee windows open now or opening within 30 days, with each university’s announcement status, most urgent first.',
+    inputs: ['schedule', 'announce'],
+    fn: (schedule, announce) => {
+      const state = new Map(announce.map((a) => [a.key, a.state]));
+      return schedule
+        .filter((r) => r.status === 'Open' || (r.status === 'Upcoming' && r.days_to_open <= 30))
+        .map((r) => ({ key: r.key, batch: r.batch, university: r.university, status: r.status, when: r.when, deadline: r.deadline, announcements: state.get(r.key) || 'Not started', poc: r.poc, days: r.status === 'Open' ? (r.days_left ?? 0) : r.days_to_open }))
+        .sort((a, b) => (a.status === b.status ? 0 : a.status === 'Open' ? -1 : 1) || a.days - b.days || a.university.localeCompare(b.university));
+    },
+  });
+
+  dash.calc('issues', {
+    title: 'Entries to double-check',
+    description: 'Dates in the sheets that look like typos.',
+    inputs: ['schedule', 'announce', 'people'],
+    fn: (schedule, announce, people) => [
+      ...people.filter((p) => p.email_issue).map((p) => ({ key: `${p.campus} · Contacts`, batch: '', university: p.campus, sheet: 'PM/COS contacts', issue: `${p.email_issue} (${p.email})` })),
+      ...schedule.filter((r) => r.issues).map((r) => ({ key: `${r.key} · Fee dates`, batch: r.batch, university: r.university, sheet: 'Fee dates', issue: r.issues })),
+      ...announce.filter((r) => r.sheet9_issue).map((r) => ({ key: `${r.key} · Sheet9`, batch: r.batch, university: r.university, sheet: 'Sheet9 vs tracker', issue: r.sheet9_issue })),
+      ...announce.filter((r) => r.sent_issue).map((r) => ({ key: `${r.key} · Announcements`, batch: r.batch, university: r.university, sheet: 'Announcement tracker', issue: `${r.sent_issue} (${r.sent_date})` })),
+    ],
+  });
+
+  dash.calc('by_month', {
+    title: 'Fee deadlines by month',
+    description: 'Universities whose fee collection closes in each month, by batch, like the pivot table in the dates sheet.',
+    inputs: ['schedule'],
+    fn: (schedule) => {
+      const MN = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      const counts = new Map();
+      schedule.filter((r) => r.end && r.status !== 'Check dates').forEach((r) => {
+        const month = r.end.slice(0, 7);
+        const k = `${month} · ${r.batch}`;
+        const o = counts.get(k) || { key: k, month, label: `${MN[+month.slice(5, 7) - 1]} ${month.slice(0, 4)}`, batch: r.batch, universities: 0 };
+        o.universities += 1;
+        counts.set(k, o);
+      });
+      return [...counts.values()].sort((a, b) => a.month.localeCompare(b.month) || a.batch.localeCompare(b.batch));
+    },
+  });
+
+  dash.calc('pivot', {
+    title: 'Fee deadlines as written',
+    description: 'Universities grouped by their fee collection end date exactly as written in the sheet, per batch, like Pivot Table 1.',
+    inputs: ['schedule'],
+    fn: (schedule) => {
+      const groups = new Map();
+      schedule.forEach((r) => {
+        const deadline = r.fee_end_text || '(blank)';
+        const k = `${r.batch} · ${deadline}`;
+        const g = groups.get(k) || { key: k, batch: r.batch, deadline, sort: r.end || '', names: [] };
+        if (r.end && (!g.sort || r.end < g.sort)) g.sort = r.end;
+        g.names.push(r.university);
+        groups.set(k, g);
+      });
+      return [...groups.values()]
+        .map((g) => ({ key: g.key, batch: g.batch, deadline: g.deadline, dated: g.sort ? 'Exact date' : 'No exact date', universities: g.names.length, names: g.names.sort().join(', '), sort: g.sort }))
+        .sort((a, b) => a.batch.localeCompare(b.batch) || (a.sort ? 0 : 1) - (b.sort ? 0 : 1) || a.sort.localeCompare(b.sort) || a.deadline.localeCompare(b.deadline));
+    },
+  });
+
+  dash.calc('sheet_notes', {
+    title: 'Other entries in the sheets',
+    description: 'Cells in the 2025 Batch tab that sit outside the table and are not linked to any university.',
+    inputs: ['dates_2025'],
+    fn: (dates_2025) => {
+      const LABEL = { sem_start: 'Sem 3 start date', sem_end: 'sem 3 end date', next_sem_start: 'Sem 4 start date', next_sem_end: 'Sem 4 end date', fee_start: 'sem 4 fees collection start date', fee_end: 'sem 4 fees collection end date', registration: 'registartion start date', remarks: 'Remarks', reminder_status: 'Reminder messages status' };
+      const out = [];
+      dates_2025.forEach((r, i) => {
+        if (String(r.university || '').trim()) return;
+        Object.keys(LABEL).forEach((f) => {
+          const v = String(r[f] || '').trim();
+          if (v) out.push({ key: `2025 Batch · row ${i + 2} · ${f}`, sheet: '2025 Batch', column: LABEL[f], value: v, note: 'Below the table; not linked to any university' });
+        });
+      });
+      return out;
+    },
+  });
+
+  dash.calc('kpis', {
+    title: 'Headline counts by batch',
+    description: 'Universities by fee window status and announcement coverage, per batch and for both together.',
+    inputs: ['schedule', 'gaps'],
+    fn: (schedule, gaps) => {
+      const MN = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      const n = new Date();
+      const as_of = `${n.getDate()} ${MN[n.getMonth()]} ${n.getFullYear()}`;
+      return ['All', '2025', '2026'].map((batch) => {
+        const s = schedule.filter((r) => batch === 'All' || r.batch === batch);
+        const c = (f) => s.filter(f).length;
+        return {
+          batch, as_of, universities: s.length,
+          open: c((r) => r.status === 'Open'),
+          closing14: c((r) => r.status === 'Open' && r.days_left != null && r.days_left <= 14),
+          upcoming: c((r) => r.status === 'Upcoming'),
+          opening30: c((r) => r.status === 'Upcoming' && r.days_to_open <= 30),
+          closed: c((r) => r.status === 'Closed'),
+          pending: c((r) => r.status === 'Dates pending'),
+          check: c((r) => r.status === 'Check dates'),
+          at_risk: gaps.filter((r) => batch === 'All' || r.batch === batch).length,
+        };
+      });
+    },
+  });
+
+  dash.calc('plan_kpis', {
+    title: 'Fee plan rollout',
+    description: 'How many core fee plan steps (stages 1–3) are running for each batch, and how many actions wait on approval or fall on T-0.',
+    inputs: ['playbook'],
+    fn: (playbook) => {
+      const core = playbook.filter((r) => /^[123]\./.test(r.stage));
+      return [{
+        scope: 'Plan', core: core.length,
+        yes_2025: core.filter((r) => r.batch_2025 === 'Yes').length,
+        yes_2026: core.filter((r) => r.batch_2026 === 'Yes').length,
+        approval: playbook.filter((r) => r.batch_2025 === 'Approval pending' || r.batch_2026 === 'Approval pending').length,
+        t0: playbook.filter((r) => /^4\./.test(r.stage)).length,
+      }];
+    },
+  });
+</script>
+
+<script>
+  // Headline numbers, status bars, deadlines by month
+  dash.draw('kpi', (el) => {
+    const d = dash.data(el.dataset.source);
+    if (d.status !== 'ok') { el.textContent = '—'; return; }
+    const [k, v] = String(el.dataset.where || '').split('=');
+    const row = d.data.find((r) => String(r[k]) === v);
+    const val = row ? row[el.dataset.field] : null;
+    el.textContent = val == null ? '—' : (typeof val === 'number' ? d3.format(',')(val) : String(val));
+  });
+
+  dash.draw('statusBars', (el) => {
+    const d = dash.data('kpis');
+    if (window.nf.failed(el, d)) return;
+    if (d.status !== 'ok') { el.replaceChildren(); el.classList.add('dash-skeleton'); return; }
+    el.classList.remove('dash-skeleton');
+    const segs = [['open', 'nf-c-open', 'Open'], ['upcoming', 'nf-c-up', 'Upcoming'], ['pending', 'nf-c-pending', 'Dates pending'], ['check', 'nf-c-check', 'Check dates'], ['closed', 'nf-c-closed', 'Closed']];
+    const label = { '2025': '2025 batch · Sem 4', '2026': '2026 batch · Sem 2' };
+    el.replaceChildren(...d.data.filter((r) => r.batch !== 'All').map((r) => {
+      const row = document.createElement('div'); row.className = 'nf-srow';
+      const l = document.createElement('span'); l.textContent = label[r.batch] || r.batch;
+      const bar = document.createElement('div'); bar.className = 'nf-sbar';
+      segs.forEach(([f, cls, name]) => {
+        if (!r[f]) return;
+        const s = document.createElement('div'); s.className = cls;
+        s.style.flex = `${r[f]} 0 0`; s.textContent = r[f];
+        s.setAttribute('aria-label', `${name}: ${r[f]}`); s.title = `${name}: ${r[f]}`;
+        bar.append(s);
+      });
+      row.append(l, bar);
+      return row;
+    }));
+  });
+
+  dash.draw('monthChart', (el) => {
+    const d = dash.data('by_month');
+    if (window.nf.failed(el, d)) return;
+    if (d.status !== 'ok') { el.replaceChildren(); el.classList.add('dash-skeleton'); return; }
+    el.classList.remove('dash-skeleton');
+    const rows = d.data.filter(window.nf.inBatch);
+    if (!rows.length) { const p = document.createElement('p'); p.className = 'nf-note'; p.textContent = 'No deadlines with exact dates in this batch.'; el.replaceChildren(p); return; }
+    const months = [...new Set(rows.map((r) => r.month))].sort();
+    const label = new Map(rows.map((r) => [r.month, r.label]));
+    const stacks = months.map((m) => {
+      let y = 0;
+      return { month: m, parts: ['2025', '2026'].map((b) => { const r = rows.find((x) => x.month === m && x.batch === b); const v = r ? r.universities : 0; const p = { b, y0: y, y1: y + v, v }; y += v; return p; }), total: y };
+    });
+    const W = Math.max(280, el.clientWidth || 520); const H = 220; const M = { t: 16, r: 8, b: 26, l: 28 };
+    const x = d3.scaleBand(months, [M.l, W - M.r]).padding(0.3);
+    const y = d3.scaleLinear([0, d3.max(stacks, (s) => s.total) || 1], [H - M.b, M.t]).nice();
+    const svg = d3.create('svg').attr('width', '100%').attr('viewBox', `0 0 ${W} ${H}`).attr('role', 'img').attr('aria-label', 'Fee deadlines by month');
+    const ticks = y.ticks(Math.min(5, y.domain()[1])).filter(Number.isInteger);
+    svg.append('g').selectAll('line').data(ticks).join('line').attr('x1', M.l).attr('x2', W - M.r).attr('y1', (t) => y(t)).attr('y2', (t) => y(t)).attr('stroke', 'var(--cds-chart-grid)');
+    svg.append('g').selectAll('text').data(ticks).join('text').attr('x', M.l - 6).attr('y', (t) => y(t) + 4).attr('text-anchor', 'end').attr('font-size', 11).attr('fill', 'var(--color-fg-muted)').text((t) => t);
+    const step = Math.ceil(months.length / Math.max(1, Math.floor((W - M.l) / 64)));
+    svg.append('g').selectAll('text').data(months).join('text').attr('x', (m) => x(m) + x.bandwidth() / 2).attr('y', H - 8).attr('text-anchor', 'middle').attr('font-size', 11).attr('fill', 'var(--color-fg-muted)')
+      .text((m, i) => (i % step === 0 ? label.get(m) : ''));
+    const color = { '2025': 'var(--nf-open)', '2026': 'var(--nf-up)' };
+    const tip = document.createElement('div'); tip.className = 'nf-tip'; tip.hidden = true;
+    const g = svg.append('g').selectAll('g').data(stacks).join('g');
+    g.selectAll('rect').data((s) => s.parts.filter((p) => p.v)).join('rect')
+      .attr('x', function () { return x(this.parentNode.__data__.month); }).attr('width', Math.min(x.bandwidth(), 40))
+      .attr('y', (p) => y(p.y1)).attr('height', (p) => Math.max(0, y(p.y0) - y(p.y1) - 1)).attr('rx', 2)
+      .attr('fill', (p) => color[p.b]);
+    g.append('rect').attr('x', (s) => x(s.month)).attr('width', x.bandwidth()).attr('y', M.t).attr('height', H - M.b - M.t).attr('fill', 'transparent')
+      .on('mousemove', (ev, s) => {
+        tip.replaceChildren();
+        const add = (cls, t) => { const dv = document.createElement('div'); dv.className = cls; dv.textContent = t; tip.append(dv); };
+        add('t2', label.get(s.month));
+        s.parts.forEach((p) => { if (p.v) add('', `${p.b} batch: ${p.v}`); });
+        tip.hidden = false;
+        const box = el.getBoundingClientRect();
+        const px = ev.clientX - box.left; const py = ev.clientY - box.top;
+        tip.style.left = `${Math.min(Math.max(0, px + 12), box.width - tip.offsetWidth)}px`;
+        tip.style.top = `${Math.max(0, py - tip.offsetHeight - 8)}px`;
+      }).on('mouseleave', () => { tip.hidden = true; });
+    el.replaceChildren(svg.node(), tip);
+  });
+</script>
+
+<script>
+  // Overview tables and university profile
+  dash.draw('watchTable', (el) => {
+    const d = dash.data('watchlist');
+    if (d.status !== 'ok') { el.replaceChildren(); return; }
+    const onlyGaps = window.nf.watch === 'gap';
+    el.replaceChildren(...d.data.filter((r) => window.nf.inBatch(r) && (!onlyGaps || r.announcements === 'Not started')).map((r) => {
+      const tr = document.createElement('tr'); tr.dataset.key = r.key;
+      if (r.announcements === 'Not started') tr.className = 'nf-gap';
+      window.nf.td(tr, r.university, 'nf-strong');
+      window.nf.td(tr, r.batch);
+      window.nf.pillTd(tr, r.status, window.nf.statusKind(r.status));
+      window.nf.td(tr, r.when, 'nf-nowrap');
+      window.nf.td(tr, r.deadline, 'nf-nowrap nf-hide-narrow');
+      window.nf.pillTd(tr, r.announcements, r.announcements === 'Not started' ? 'bad' : window.nf.chanKind(r.announcements));
+      window.nf.td(tr, r.poc, 'nf-nowrap nf-hide-narrow');
+      return tr;
+    }));
+  });
+
+  const enc = (v) => String(v).replace(/%/g, '%25').replace(/&/g, '%26').replace(/=/g, '%3D');
+  dash.draw('det', (el) => {
+    const key = window.nf.sel;
+    const d = dash.data(el.dataset.source);
+    if (!key || d.status !== 'ok') { el.textContent = '—'; return; }
+    el.dataset.where = 'key=' + enc(key);
+    const row = d.data.find((r) => r.key === key);
+    const v = row ? row[el.dataset.field] : null;
+    el.textContent = v == null || v === '' ? '—' : String(v);
+  });
+</script>
+
+<script>
+  // Timeline of fee windows
+  dash.draw('timeline', (el) => {
+    const d = dash.data('schedule');
+    if (window.nf.failed(el, d)) return;
+    if (d.status !== 'ok') { el.replaceChildren(); el.classList.add('dash-skeleton'); return; }
+    el.classList.remove('dash-skeleton');
+    const P = (s) => new Date(s + 'T00:00:00Z');
+    const n = new Date();
+    const today = new Date(Date.UTC(n.getFullYear(), n.getMonth(), n.getDate()));
+    const rows = d.data.filter((r) => window.nf.inBatch(r) && r.end && ['Open', 'Upcoming', 'Closed'].includes(r.status))
+      .sort((a, b) => a.end.localeCompare(b.end) || a.university.localeCompare(b.university));
+    if (!rows.length) { const p = document.createElement('p'); p.className = 'nf-note'; p.textContent = 'No universities in this batch have both fee dates yet.'; el.replaceChildren(p); return; }
+    const W = Math.max(280, el.clientWidth || 640);
+    const wide = W >= 760;
+    const labelW = wide ? Math.min(300, W * 0.32) : 0;
+    const rowH = wide ? 26 : 38; const top = 40; const H = top + rows.length * rowH + 6;
+    const floor = d3.utcDay.offset(today, -60);
+    const starts = rows.map((r) => (r.start ? P(r.start) : today));
+    let lo = d3.min([d3.utcDay.offset(today, -14), ...starts]);
+    if (lo < floor) lo = floor;
+    const hi = d3.utcDay.offset(d3.max(rows, (r) => P(r.end)), 8);
+    const x = d3.scaleUtc([lo, hi], [labelW + 8, W - (wide ? 70 : 8)]);
+    const color = { Open: 'var(--nf-open)', Upcoming: 'var(--nf-up)', Closed: 'var(--cds-chart-muted)' };
+    const svg = d3.create('svg').attr('width', '100%').attr('viewBox', `0 0 ${W} ${H}`).attr('role', 'img').attr('aria-label', 'Fee collection windows by university');
+    const ticks = x.ticks(d3.utcMonth.every((W - labelW) < 520 ? 2 : 1)).filter((t) => t >= lo);
+    svg.append('g').selectAll('line').data(ticks).join('line').attr('x1', (t) => x(t)).attr('x2', (t) => x(t)).attr('y1', 18).attr('y2', H).attr('stroke', 'var(--cds-chart-grid)');
+    svg.append('g').selectAll('text').data(ticks).join('text').attr('x', (t) => x(t) + 3).attr('y', 12).attr('font-size', 11).attr('fill', 'var(--color-fg-muted)').text((t) => d3.utcFormat('%b %Y')(t));
+    const tip = document.createElement('div'); tip.className = 'nf-tip'; tip.hidden = true;
+    const both = window.nf.batch() === 'all';
+    const g = svg.append('g').selectAll('g').data(rows).join('g').attr('transform', (r, i) => `translate(0,${top + i * rowH})`).style('cursor', 'pointer');
+    g.append('rect').attr('x', 0).attr('y', 0).attr('width', W).attr('height', rowH).attr('fill', 'transparent');
+    const by = wide ? 7 : 18;
+    g.append('text').attr('x', wide ? labelW : 8).attr('y', wide ? 17 : 12).attr('text-anchor', wide ? 'end' : 'start').attr('font-size', 12).attr('fill', 'var(--color-fg)')
+      .text((r) => r.university + (both ? ` · ${r.batch}` : ''))
+      .each(function () {
+        const max = wide ? labelW - 8 : W - 100;
+        let t = this.textContent;
+        while (t.length > 8 && this.getComputedTextLength() > max) { t = t.slice(0, -2); this.textContent = t + '…'; }
+      });
+    g.append('rect').attr('x', (r, i) => Math.max(x.range()[0], x(starts[i]))).attr('y', by).attr('height', 12).attr('rx', 3)
+      .attr('width', (r, i) => Math.max(4, x(P(r.end)) - Math.max(x.range()[0], x(starts[i])))).attr('fill', (r) => color[r.status]);
+    g.append('text').attr('font-size', 11).attr('fill', 'var(--color-fg-muted)')
+      .attr('x', (r) => (wide ? x(P(r.end)) + 6 : W - 8)).attr('y', wide ? 17 : 12).attr('text-anchor', wide ? 'start' : 'end')
+      .text((r) => r.deadline);
+    const tx = x(today);
+    svg.append('line').attr('x1', tx).attr('x2', tx).attr('y1', 20).attr('y2', H).attr('stroke', 'var(--cds-chart-reference)').attr('stroke-width', 1.5).attr('stroke-dasharray', '4 3');
+    svg.append('text').attr('x', tx + 4).attr('y', 30).attr('font-size', 11).attr('fill', 'var(--color-fg)').text('Today');
+    g.on('click', (ev, r) => window.nf.select(r.key));
+    g.on('mousemove', (ev, r) => {
+      tip.replaceChildren();
+      const add = (cls, t) => { const dv = document.createElement('div'); dv.className = cls; dv.textContent = t; tip.append(dv); };
+      add('t1', r.university);
+      add('t2', `${r.batch} batch · ${r.status}`);
+      add('', r.window);
+      if (r.when) add('', r.when);
+      tip.hidden = false;
+      const box = el.getBoundingClientRect();
+      const px = ev.clientX - box.left; const py = ev.clientY - box.top;
+      const tw = tip.offsetWidth; const th = tip.offsetHeight;
+      tip.style.left = `${Math.min(Math.max(0, px + 12), box.width - tw)}px`;
+      tip.style.top = `${py + 14 + th > box.height ? py - th - 8 : py + 14}px`;
+    }).on('mouseleave', () => { tip.hidden = true; });
+    el.replaceChildren(svg.node(), tip);
+  });
+</script>
+
+<script>
+  // University table, calendar, issues
+  const sortState = { field: null, dir: 1 };
+  const ORDER = { 'Open': 0, 'Upcoming': 1, 'Dates pending': 2, 'Check dates': 3, 'Closed': 4 };
+  document.querySelectorAll('.nf-search').forEach((inp) => inp.addEventListener('input', () => dash.draw('schedTable')));
+  document.querySelectorAll('.nf-sched th.nf-sortable').forEach((th) => th.addEventListener('click', () => {
+    const f = th.dataset.field;
+    sortState.dir = sortState.field === f ? -sortState.dir : 1;
+    sortState.field = f;
+    document.querySelectorAll('.nf-sched th.nf-sortable').forEach((o) => o.setAttribute('aria-sort', o.dataset.field === f ? (sortState.dir > 0 ? 'ascending' : 'descending') : 'none'));
+    dash.draw('schedTable');
+  }));
+  const defaultOrder = (a, b) => (ORDER[a.status] - ORDER[b.status]) || (a.end || 'zzzz').localeCompare(b.end || 'zzzz') || a.university.localeCompare(b.university);
+  dash.draw('schedTable', (el) => {
+    const d = dash.data('schedule');
+    if (d.status !== 'ok') { el.replaceChildren(); return; }
+    const q = [...document.querySelectorAll('.nf-search')].map((i) => i.value.trim().toLowerCase()).find((v) => v) || '';
+    const FOCUS = {
+      open: (r) => r.status === 'Open',
+      closing14: (r) => r.status === 'Open' && r.days_left != null && r.days_left <= 14,
+      opening30: (r) => r.status === 'Upcoming' && r.days_to_open <= 30,
+      pending: (r) => r.status === 'Dates pending',
+    };
+    const focus = FOCUS[window.nf.focus] || (() => true);
+    let rows = d.data.filter((r) => window.nf.inBatch(r) && focus(r) && (!q || [r.university, r.status, r.remarks, r.window, r.batch, r.poc, r.regional_cos].join(' ').toLowerCase().includes(q)));
+    const f = sortState.field;
+    const val = (r) => {
+      if (f === 'window' || f === 'when') return r.end || r.start || 'zzzz';
+      if (f === 'status') return ORDER[r.status] ?? 9;
+      if (f === 'sop') return r.tday == null ? 99999 : r.tday;
+      return String(r[f] ?? '').toLowerCase();
+    };
+    rows = rows.slice().sort(f ? (a, b) => { const A = val(a); const B = val(b); return (A < B ? -1 : A > B ? 1 : 0) * sortState.dir; } : defaultOrder);
+    el.replaceChildren(...rows.map((r) => {
+      const tr = document.createElement('tr'); tr.dataset.key = r.key;
+      window.nf.td(tr, r.university, 'nf-strong');
+      window.nf.td(tr, r.batch);
+      window.nf.pillTd(tr, r.status, window.nf.statusKind(r.status));
+      window.nf.td(tr, r.window);
+      window.nf.td(tr, r.when, 'nf-nowrap');
+      window.nf.td(tr, r.registration, 'nf-hide-narrow nf-nowrap');
+      window.nf.td(tr, r.sop || '—', 'nf-nowrap');
+      window.nf.pillTd(tr, r.reminder, window.nf.chanKind(r.reminder), 'nf-hide-narrow');
+      window.nf.td(tr, r.poc, 'nf-nowrap');
+      window.nf.td(tr, r.regional_cos, 'nf-nowrap nf-hide-narrow');
+      window.nf.td(tr, r.remarks, 'nf-long nf-hide-narrow');
+      return tr;
+    }));
+  });
+
+  dash.draw('calTable', (el) => {
+    const d = dash.data('schedule');
+    if (d.status !== 'ok') { el.replaceChildren(); return; }
+    const rows = d.data.filter(window.nf.inBatch).slice().sort((a, b) => a.batch.localeCompare(b.batch) || a.university.localeCompare(b.university));
+    el.replaceChildren(...rows.map((r) => {
+      const tr = document.createElement('tr'); tr.dataset.key = r.key;
+      window.nf.td(tr, r.university, 'nf-strong');
+      window.nf.td(tr, r.batch);
+      window.nf.td(tr, r.cur_sem, 'nf-nowrap');
+      ['sem_start', 'sem_end'].forEach((f) => window.nf.td(tr, r[f], 'nf-long'));
+      window.nf.td(tr, r.next_sem, 'nf-nowrap');
+      ['next_sem_start', 'next_sem_end', 'fee_start_text', 'fee_end_text', 'registration'].forEach((f) => window.nf.td(tr, r[f], 'nf-long'));
+      window.nf.pillTd(tr, r.reminder, window.nf.chanKind(r.reminder));
+      return tr;
+    }));
+  });
+
+  dash.draw('issuesTable', (el) => {
+    const d = dash.data('issues');
+    if (d.status !== 'ok') { el.replaceChildren(); return; }
+    el.replaceChildren(...d.data.filter(window.nf.inBatch).map((r) => {
+      const tr = document.createElement('tr'); tr.dataset.key = r.key;
+      window.nf.td(tr, r.university, 'nf-strong');
+      window.nf.td(tr, r.batch);
+      window.nf.td(tr, r.sheet, 'nf-nowrap');
+      window.nf.td(tr, r.issue);
+      return tr;
+    }));
+  });
+</script>
+
+<script>
+  // Announcements, messages and action plan
+  dash.draw('channelBars', (el) => {
+    const d = dash.data('channels');
+    if (window.nf.failed(el, d)) return;
+    if (d.status !== 'ok') { el.replaceChildren(); el.classList.add('dash-skeleton'); return; }
+    el.classList.remove('dash-skeleton');
+    const b = window.nf.batch() === 'all' ? 'All' : window.nf.batch();
+    const segs = [['done', 'nf-c-done', 'Done'], ['in_progress', 'nf-c-prog', 'In progress'], ['not_done', 'nf-c-nd', 'Not done'], ['not_started', 'nf-c-ns', 'Not started']];
+    el.replaceChildren(...d.data.filter((r) => r.batch === b).map((r) => {
+      const row = document.createElement('div'); row.className = 'nf-srow';
+      const l = document.createElement('span'); l.textContent = r.channel;
+      const bar = document.createElement('div'); bar.className = 'nf-sbar';
+      segs.forEach(([f, cls, name]) => {
+        if (!r[f]) return;
+        const s = document.createElement('div'); s.className = cls;
+        s.style.flex = `${r[f]} 0 0`; s.textContent = r[f];
+        s.setAttribute('aria-label', `${name}: ${r[f]}`); s.title = `${name}: ${r[f]}`;
+        bar.append(s);
+      });
+      row.append(l, bar);
+      return row;
+    }));
+  });
+
+  dash.draw('matrixTable', (el) => {
+    const d = dash.data('announce');
+    if (d.status !== 'ok') { el.replaceChildren(); return; }
+    const CH = ['click_share_sheet', 'student_app', 'student_mail', 'student_whatsapp', 'parent_app', 'parent_mail', 'parent_whatsapp', 'sc_calls_students', 'sc_calls_parents'];
+    const rows = d.data.filter(window.nf.inBatch).slice()
+      .sort((a, b) => (b.done + b.in_progress + b.not_done) - (a.done + a.in_progress + a.not_done) || b.done - a.done || a.university.localeCompare(b.university));
+    el.replaceChildren(...rows.map((r) => {
+      const tr = document.createElement('tr'); tr.dataset.key = r.key;
+      window.nf.td(tr, r.university, 'nf-strong');
+      window.nf.td(tr, r.batch);
+      window.nf.pillTd(tr, r.state, window.nf.chanKind(r.state));
+      CH.forEach((c) => window.nf.pillTd(tr, r[c], window.nf.chanKind(r[c])));
+      window.nf.td(tr, r.sent_date, 'nf-nowrap');
+      window.nf.td(tr, r.sheet9_sent, 'nf-nowrap');
+      window.nf.pillTd(tr, r.payment_signoff, window.nf.signKind(r.payment_signoff));
+      window.nf.td(tr, r.fee_link, 'nf-nowrap');
+      return tr;
+    }));
+  });
+
+  dash.draw('pivotTable', (el) => {
+    const d = dash.data('pivot');
+    if (d.status !== 'ok') { el.replaceChildren(); return; }
+    el.replaceChildren(...d.data.filter(window.nf.inBatch).map((r) => {
+      const tr = document.createElement('tr'); tr.dataset.key = r.key;
+      window.nf.td(tr, r.batch);
+      window.nf.td(tr, r.deadline, 'nf-strong');
+      window.nf.pillTd(tr, r.dated, r.dated === 'Exact date' ? 'ok' : 'warn', 'nf-hide-narrow');
+      window.nf.td(tr, r.universities, 'nf-num');
+      window.nf.td(tr, r.names, 'nf-long');
+      return tr;
+    }));
+  });
+
+  dash.draw('notesTable', (el) => {
+    const d = dash.data('sheet_notes');
+    if (d.status !== 'ok') { el.replaceChildren(); return; }
+    el.replaceChildren(...d.data.map((r) => {
+      const tr = document.createElement('tr'); tr.dataset.key = r.key;
+      window.nf.td(tr, r.sheet, 'nf-nowrap');
+      window.nf.td(tr, r.column);
+      window.nf.td(tr, r.value, 'nf-strong nf-nowrap');
+      window.nf.td(tr, r.note);
+      return tr;
+    }));
+  });
+
+  dash.draw('peopleTable', (el) => {
+    const d = dash.data('people');
+    if (d.status !== 'ok') { el.replaceChildren(); return; }
+    el.replaceChildren(...d.data.slice().sort((a, b) => a.campus.localeCompare(b.campus)).map((r) => {
+      const tr = document.createElement('tr'); tr.dataset.key = r.key;
+      window.nf.td(tr, r.campus, 'nf-strong');
+      window.nf.td(tr, r.location, 'nf-hide-narrow');
+      window.nf.td(tr, r.poc_name, 'nf-nowrap');
+      window.nf.pillTd(tr, r.role, r.role === 'COS' ? 'info' : 'muted');
+      window.nf.td(tr, r.email);
+      window.nf.td(tr, r.fee_sheet, 'nf-hide-narrow');
+      return tr;
+    }));
+  });
+
+  dash.draw('leadsTable', (el) => {
+    const d = dash.data('regional_cos');
+    if (d.status !== 'ok') { el.replaceChildren(); return; }
+    el.replaceChildren(...d.data.map((r) => {
+      const tr = document.createElement('tr'); tr.dataset.key = r.name;
+      window.nf.td(tr, r.team, 'nf-nowrap');
+      window.nf.td(tr, r.name, 'nf-strong nf-nowrap');
+      window.nf.td(tr, r.email);
+      window.nf.td(tr, r.colleges, 'nf-long');
+      return tr;
+    }));
+  });
+
+  dash.draw('messages', (el) => {
+    const d = dash.data('comms_owners');
+    if (window.nf.failed(el, d)) return;
+    if (d.status !== 'ok') { el.replaceChildren(); el.classList.add('dash-skeleton'); return; }
+    el.classList.remove('dash-skeleton');
+    const mk = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+    el.replaceChildren(...d.data.map((r) => {
+      const card = mk('article', 'nf-msg');
+      const head = mk('div', 'nf-card-head');
+      head.append(mk('h2', '', r.channel), mk('span', 'nf-pill k-info', r.audience));
+      const meta = mk('div', 'nf-msg-meta');
+      meta.append(mk('span', '', `Owner: ${r.owner}`), mk('span', '', `Sent: ${r.sent_on}`), mk('span', '', `Cadence: ${r.cadence}`));
+      card.append(head, meta);
+      if (r.notes) card.append(mk('p', 'nf-note', r.notes));
+      if (r.message) card.append(mk('pre', 'nf-msg-body', r.message));
+      else card.append(mk('p', 'nf-note', 'No message template in the sheet for this channel.'));
+      if (r.previous_message) {
+        const det = mk('details');
+        det.append(mk('summary', '', 'Previous message'), mk('pre', 'nf-msg-body', r.previous_message));
+        card.append(det);
+      }
+      return card;
+    }));
+  });
+
+  dash.draw('planTable', (el) => {
+    const d = dash.data('playbook');
+    if (d.status !== 'ok') { el.replaceChildren(); return; }
+    const mode = el.dataset.cols || 'full';
+    el.replaceChildren(...d.data.filter((r) => r.stage === el.dataset.stage).map((r) => {
+      const tr = document.createElement('tr');
+      window.nf.td(tr, r.id, 'nf-nowrap');
+      window.nf.td(tr, r.action, 'nf-strong');
+      if (mode !== 'evidence') {
+        window.nf.td(tr, r.timeline);
+        window.nf.td(tr, r.owner);
+        if (mode === 'full') { window.nf.td(tr, r.sequence, 'nf-hide-narrow'); window.nf.td(tr, r.reporting, 'nf-hide-narrow nf-nowrap'); }
+      }
+      window.nf.pillTd(tr, r.batch_2025, window.nf.planKind(r.batch_2025));
+      window.nf.pillTd(tr, r.batch_2026, window.nf.planKind(r.batch_2026));
+      if (mode === 'full') window.nf.td(tr, r.notes, 'nf-long nf-hide-narrow');
+      if (mode === 'short') window.nf.td(tr, r.notes, 'nf-long');
+      return tr;
+    }));
+  });
+</script>
+
+</div>
+
+</div>
+</body>
+</html>
