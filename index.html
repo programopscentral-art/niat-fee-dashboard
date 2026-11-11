@@ -120,6 +120,14 @@ html, body { margin: 0; background: var(--color-bg); color: var(--color-fg); fon
 .nf-tile.a-up { border-left-color: var(--nf-up); }
 .nf-tile.a-bad { border-left-color: var(--cds-chart-status-critical); }
 .nf-tile.a-warn { border-left-color: var(--color-warn); }
+.nf-tile.a-alert { border-left-color: var(--color-bad); background: color-mix(in srgb, var(--color-bad) 6%, var(--color-panel)); }
+.nf-tile.a-alert .nf-big { color: var(--color-bad); }
+.nf-badge { display: inline-block; min-width: 1.4em; margin-left: 6px; padding: 0 6px; border-radius: 999px; background: var(--color-bad); color: #fff; font-size: .7rem; font-weight: 650; line-height: 1.5; text-align: center; vertical-align: 1px; }
+.nf-badge[data-dash-source-state=empty] { color: #fff; }
+.nf tr.nf-urgent td:first-child { box-shadow: inset 3px 0 0 var(--color-bad); }
+.nf tr.nf-soon td:first-child { box-shadow: inset 3px 0 0 var(--color-warn); }
+.nf tbody.nf-click tr:not([data-key]) { cursor: default; }
+.nf-pill.k-blue { color: var(--nf-accent, #2563a8); }
 .nf-tile-label { font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); text-transform: uppercase; letter-spacing: .05em; }
 .nf-big { font-family: var(--font-anthropic-serif); font-weight: 400; font-size: calc(var(--cds-font-size-title) * 1.3); line-height: 1.05; font-variant-numeric: tabular-nums; }
 .nf-sub { font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); font-variant-numeric: tabular-nums; }
@@ -248,6 +256,7 @@ html, body { margin: 0; background: var(--color-bg); color: var(--color-fg); fon
       <button class="nf-tab" role="tab" data-tab="universities" aria-selected="false">Universities</button>
       <button class="nf-tab" role="tab" data-tab="calendar" aria-selected="false">Academic calendar</button>
       <button class="nf-tab" role="tab" data-tab="announcements" aria-selected="false">Announcements</button>
+      <button class="nf-tab" role="tab" data-tab="alerts" aria-selected="false">Alerts<span class="nf-badge" data-draw="kpi" data-source="alert_counts" data-field="total" data-where="scope=All">—</span></button>
       <button class="nf-tab" role="tab" data-tab="messages" aria-selected="false">Resources</button>
       <button class="nf-tab" role="tab" data-tab="playbook" aria-selected="false">Action plan</button>
     </nav>
@@ -292,6 +301,12 @@ html, body { margin: 0; background: var(--color-bg); color: var(--color-fg); fon
         <span class="nf-big" data-draw="kpi" data-source="kpis" data-field="pending" data-where="batch=All">—</span>
         <span class="nf-sub"><span class="nf-sublink" data-batch="2025">2025: <span data-draw="kpi" data-source="kpis" data-field="pending" data-where="batch=2025">—</span></span> · <span class="nf-sublink" data-batch="2026">2026: <span data-draw="kpi" data-source="kpis" data-field="pending" data-where="batch=2026">—</span></span></span>
         <span class="nf-tile-go">See who hasn't shared →</span>
+      </div>
+      <div class="nf-tile a-alert" data-focus="alerts" role="button" tabindex="0" title="See all alerts and errors">
+        <span class="nf-tile-label">Alerts</span>
+        <span class="nf-big" data-draw="kpi" data-source="alert_counts" data-field="total" data-where="scope=All">—</span>
+        <span class="nf-sub">Errors: <span data-draw="kpi" data-source="alert_counts" data-field="errors" data-where="scope=All">—</span> · Alerts: <span data-draw="kpi" data-source="alert_counts" data-field="alerts" data-where="scope=All">—</span> · Urgent: <span data-draw="kpi" data-source="alert_counts" data-field="high" data-where="scope=All">—</span></span>
+        <span class="nf-tile-go">See all alerts and errors →</span>
       </div>
     </div>
 
@@ -604,6 +619,37 @@ html, body { margin: 0; background: var(--color-bg); color: var(--color-fg); fon
   </section>
 
   <!-- MESSAGES -->
+  <!-- ALERTS -->
+  <section id="alerts" class="nf-page" hidden>
+    <div class="nf-card">
+      <div class="nf-card-head">
+        <div class="nf-sec-head">
+          <h2 id="alerts-list">Alerts and errors</h2>
+          <p class="nf-note">Alerts are things to act on (deadlines closing, announcements not sent, sign-offs pending or disputed, missing PM/COS or fee dates). Errors are problems in the data (sources that failed to load, entries that look wrong in the sheets). Urgent items first. Select a row to open the university profile.</p>
+        </div>
+        <div class="nf-seg" role="group" aria-label="Show">
+          <button type="button" class="nf-segbtn" data-afilter="all" aria-pressed="true">All</button>
+          <button type="button" class="nf-segbtn" data-afilter="urgent" aria-pressed="false">Urgent</button>
+          <button type="button" class="nf-segbtn" data-afilter="alert" aria-pressed="false">Alerts</button>
+          <button type="button" class="nf-segbtn" data-afilter="error" aria-pressed="false">Errors</button>
+        </div>
+      </div>
+      <div class="nf-scroll">
+        <table data-source="alerts" data-row-key="key">
+          <thead><tr>
+            <th data-field="level">Priority</th>
+            <th data-field="kind">Kind</th>
+            <th data-field="type">What</th>
+            <th data-field="university">University</th>
+            <th data-field="batch">Batch</th>
+            <th data-field="detail">Details</th>
+          </tr></thead>
+          <tbody data-draw="alertsTable" class="nf-click"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
   <section id="messages" class="nf-page" hidden>
     <div class="nf-card nf-template">
       <div class="nf-card-head">
@@ -822,7 +868,7 @@ WhatsApp Msg to Parents and Students via Success Coach</td><td class="">Central 
 
 <script>
   // Tabs, batch filter and university selection
-  const tabs = ['overview', 'universities', 'calendar', 'announcements', 'messages', 'playbook'];
+  const tabs = ['overview', 'universities', 'calendar', 'announcements', 'alerts', 'messages', 'playbook'];
   const show = (name) => {
     document.querySelectorAll('.nf-page').forEach((s) => { s.hidden = s.id !== name; });
     document.querySelectorAll('.nf-tab').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.tab === name)));
@@ -863,14 +909,25 @@ WhatsApp Msg to Parents and Students via Success Coach</td><td class="">Central 
   const flash = (el) => { el.classList.remove('nf-flash'); void el.offsetWidth; el.classList.add('nf-flash'); el.scrollIntoView({ block: 'start', behavior: 'smooth' }); };
   const setWatch = (w) => {
     window.nf.watch = w;
-    document.querySelectorAll('.nf-segbtn').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.watch === w)));
+    document.querySelectorAll('.nf-segbtn[data-watch]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.watch === w)));
     dash.draw('watchTable');
   };
-  document.querySelectorAll('.nf-segbtn').forEach((b) => b.addEventListener('click', () => setWatch(b.dataset.watch)));
+  document.querySelectorAll('.nf-segbtn[data-watch]').forEach((b) => b.addEventListener('click', () => setWatch(b.dataset.watch)));
+  window.nf.alertFilter = 'all';
+  document.querySelectorAll('.nf-segbtn[data-afilter]').forEach((b) => b.addEventListener('click', () => {
+    window.nf.alertFilter = b.dataset.afilter;
+    document.querySelectorAll('.nf-segbtn[data-afilter]').forEach((o) => o.setAttribute('aria-pressed', String(o === b)));
+    dash.draw('alertsTable');
+  }));
   const openTile = (tile, e) => {
     const sub = e && e.target.closest('[data-batch]');
     if (sub) setBatch(sub.dataset.batch);
     const f = tile.dataset.focus;
+    if (f === 'alerts') {
+      show('alerts');
+      document.querySelectorAll('#alerts-list').forEach((h) => { const card = h.closest('.nf-card'); if (card) flash(card); });
+      return;
+    }
     if (f === 'at_risk') {
       setWatch('gap');
       show('overview');
@@ -1276,6 +1333,93 @@ WhatsApp Msg to Parents and Students via Success Coach</td><td class="">Central 
         tip.style.top = `${Math.max(0, py - tip.offsetHeight - 8)}px`;
       }).on('mouseleave', () => { tip.hidden = true; });
     el.replaceChildren(svg.node(), tip);
+  });
+</script>
+
+<script>
+  // Alerts and errors: every item to act on, and every data problem, in one list
+  dash.calc('alerts', {
+    title: 'Alerts and errors',
+    description: 'Deadlines closing, announcements not sent, sign-offs pending, missing PM/COS or fee dates, and entries that look wrong in the sheets.',
+    inputs: ['schedule', 'announce', 'gaps', 'issues'],
+    fn: (schedule, announce, gaps, issues) => {
+      const out = [];
+      const add = (kind, level, type, r, detail) => {
+        const batch = r.batch || ''; const university = r.university || '';
+        out.push({ key: `${kind} · ${type} · ${batch} · ${university} · ${out.length}`, kind, level, type, batch, university, detail: detail || '', uni: batch && university ? `${batch} · ${university}` : '' });
+      };
+      schedule.forEach((r) => {
+        if (r.status === 'Open' && r.days_left != null && r.days_left <= 3) add('Alert', 'Urgent', 'Deadline imminent', r, `${r.when} (${r.deadline})`);
+        else if (r.status === 'Open' && r.days_left != null && r.days_left <= 14) add('Alert', 'Soon', 'Closing within 14 days', r, `${r.when} (${r.deadline})`);
+        if ((r.status === 'Open' || r.status === 'Upcoming') && r.poc === 'Not assigned') add('Alert', 'Soon', 'No PM/COS assigned', r, `${r.status}: ${r.window}`);
+        if (r.status === 'Dates pending') {
+          if (r.tday != null && r.tday <= 60) {
+            const when = r.tday > 0 ? `Semester starts in ${r.tday} day${r.tday === 1 ? '' : 's'}` : r.tday === 0 ? 'Semester starts today' : `Semester started ${-r.tday} day${r.tday === -1 ? '' : 's'} ago`;
+            add('Alert', 'Urgent', 'Fee dates not shared', r, `${when} and the university hasn't shared fee dates`);
+          } else add('Alert', 'Watch', 'Fee dates not shared', r, `Fee window: ${r.window}`);
+        }
+        if (r.status === 'Check dates') add('Error', 'Urgent', "Fee dates can't be read", r, `${r.window}: deadline is before the start date`);
+      });
+      gaps.forEach((g) => add('Alert', g.status === 'Open' ? 'Urgent' : 'Soon', 'No announcement sent', g, `${g.when}; nothing sent on any channel`));
+      const CH = [['student_app', 'Student app'], ['student_mail', 'Student email'], ['student_whatsapp', 'Student WhatsApp'], ['parent_app', 'Parent app'], ['parent_mail', 'Parent email'], ['parent_whatsapp', 'Parent WhatsApp']];
+      announce.forEach((a) => {
+        const notDone = CH.filter(([f]) => a[f] === 'Not Done').map(([, label]) => label);
+        if (notDone.length) add('Alert', 'Soon', 'Announcement channel not done', a, notDone.join(', '));
+        const s = String(a.payment_signoff || '').trim().toLowerCase();
+        if (s.includes('dispute')) add('Alert', 'Urgent', 'Payment sign-off disputed', a, a.payment_signoff);
+        else if (s.startsWith('need')) add('Alert', 'Soon', 'Payment sign-off pending', a, a.payment_signoff);
+        else if (s.startsWith('in progress')) add('Alert', 'Watch', 'Payment sign-off in progress', a, a.payment_signoff);
+        const link = String(a.fee_link || '').trim();
+        if (link && link !== 'Not tracked' && !/^https?:\/\//i.test(link)) add('Alert', 'Soon', 'Fee collection link not ready', a, link);
+      });
+      issues.forEach((i) => String(i.issue || '').split(/; (?=[A-Z])/).forEach((p) => {
+        if (!p.trim() || /deadline is before the start date/i.test(p)) return;
+        add('Error', /future|sheet9/i.test(p) ? 'Watch' : 'Soon', `Check ${i.sheet}`, i, p);
+      }));
+      const L = { Urgent: 0, Soon: 1, Watch: 2 }; const K = { Error: 0, Alert: 1 };
+      return out.sort((a, b) => L[a.level] - L[b.level] || K[a.kind] - K[b.kind] || a.type.localeCompare(b.type) || a.university.localeCompare(b.university));
+    },
+  });
+
+  dash.calc('alert_counts', {
+    title: 'Alert counts',
+    description: 'Total alerts and errors, and how many are urgent.',
+    inputs: ['alerts'],
+    fn: (alerts) => [{
+      scope: 'All', total: alerts.length,
+      errors: alerts.filter((a) => a.kind === 'Error').length,
+      alerts: alerts.filter((a) => a.kind === 'Alert').length,
+      high: alerts.filter((a) => a.level === 'Urgent').length,
+    }],
+  });
+
+  dash.draw('alertsTable', (el) => {
+    const SOURCES = [['dates_2025', '2025 fee dates'], ['dates_2026', '2026 fee dates'], ['contacts', 'PM/COS contacts'], ['tracker_2025', '2025 tracker'], ['tracker_2026', '2026 tracker'], ['sheet9', 'Sheet9'], ['regional_cos', 'Regional COS list']];
+    const failed = SOURCES.filter(([id]) => dash.data(id).status === 'error').map(([id, name]) => ({
+      key: `load · ${id}`, kind: 'Error', level: 'Urgent', type: 'Data failed to load', batch: '', university: name, uni: '',
+      detail: 'The source couldn’t be read; the numbers that depend on it are missing',
+    }));
+    const d = dash.data('alerts');
+    const f = window.nf.alertFilter || 'all';
+    const keep = (r) => f === 'all' || (f === 'urgent' && r.level === 'Urgent') || (f === 'alert' && r.kind === 'Alert') || (f === 'error' && r.kind === 'Error');
+    const rows = [...failed, ...(d.status === 'ok' ? d.data : [])].filter((r) => (!r.batch || window.nf.inBatch(r)) && keep(r));
+    if (!rows.length) {
+      const tr = document.createElement('tr'); const td = window.nf.td(tr, 'Nothing here right now.'); td.colSpan = 6; td.className = 'nf-note';
+      el.replaceChildren(tr); return;
+    }
+    const LEVEL = { Urgent: 'bad', Soon: 'warn', Watch: 'muted' };
+    el.replaceChildren(...rows.map((r) => {
+      const tr = document.createElement('tr');
+      if (r.uni) tr.dataset.key = r.uni;
+      if (r.level === 'Urgent') tr.className = 'nf-urgent'; else if (r.level === 'Soon') tr.className = 'nf-soon';
+      window.nf.pillTd(tr, r.level, LEVEL[r.level] || 'muted');
+      window.nf.pillTd(tr, r.kind, r.kind === 'Error' ? 'bad' : 'blue');
+      window.nf.td(tr, r.type, 'nf-strong nf-nowrap');
+      window.nf.td(tr, r.university);
+      window.nf.td(tr, r.batch);
+      window.nf.td(tr, r.detail, 'nf-long');
+      return tr;
+    }));
   });
 </script>
 
