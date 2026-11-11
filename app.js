@@ -103,7 +103,7 @@
       if (error) { msg(error.message === 'Invalid login credentials' ? 'Wrong email or password.' : error.message, true); return; }
       msg('');
     });
-    $('lg-back').addEventListener('click', () => { $('lg-code-form').hidden = true; $('lg-email-form').hidden = false; msg(''); });
+    $('lg-back').addEventListener('click', () => { $('lg-code-form').hidden = true; $('lg-pw-form').hidden = false; msg(''); });
     $('ub-logout').addEventListener('click', async () => { await sb.auth.signOut(); location.reload(); });
 
     let t;

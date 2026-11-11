@@ -48,19 +48,19 @@ html, body { margin: 0; background: var(--color-bg); color: var(--color-fg); fon
   <div class="lg-card">
     <p class="lg-eyebrow">NIAT · Finance operations</p>
     <h1 class="lg-title">Fee collection visibility</h1>
-    <form id="lg-email-form">
-      <label for="lg-email">Work email</label>
-      <input id="lg-email" type="email" autocomplete="email" required placeholder="name@nxtwave.co.in">
-      <button type="submit">Send login code</button>
-      <button type="button" class="lg-link" id="lg-to-pw">Have a password? Log in with password</button>
-    </form>
-    <form id="lg-pw-form" hidden>
-      <label for="lg-pw-email">Email</label>
-      <input id="lg-pw-email" type="email" autocomplete="username" required>
+    <form id="lg-pw-form">
+      <label for="lg-pw-email">Work email</label>
+      <input id="lg-pw-email" type="email" autocomplete="username" required placeholder="name@nxtwave.co.in">
       <label for="lg-pw">Password</label>
       <input id="lg-pw" type="password" autocomplete="current-password" required>
       <button type="submit">Log in</button>
-      <button type="button" class="lg-link" id="lg-to-email">Log in with an email link instead</button>
+      <button type="button" class="lg-link" id="lg-to-email">No password? Get a login link by email</button>
+    </form>
+    <form id="lg-email-form" hidden>
+      <label for="lg-email">Work email</label>
+      <input id="lg-email" type="email" autocomplete="email" required placeholder="name@nxtwave.co.in">
+      <button type="submit">Send login link</button>
+      <button type="button" class="lg-link" id="lg-to-pw">Log in with password instead</button>
     </form>
     <form id="lg-code-form" hidden>
       <p class="lg-note">We emailed a login link to <b id="lg-sent-to"></b>. Click it, or type the 6-digit code from the email.</p>
