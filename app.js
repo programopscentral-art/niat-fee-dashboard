@@ -93,6 +93,16 @@
       if (error) { msg(error.message, true); return; }
       msg('');
     });
+    const on = (id, ev, fn) => { const el = $(id); if (el) el.addEventListener(ev, fn); };
+    on('lg-to-pw', 'click', () => { $('lg-email-form').hidden = true; $('lg-pw-form').hidden = false; msg(''); $('lg-pw-email').focus(); });
+    on('lg-to-email', 'click', () => { $('lg-pw-form').hidden = true; $('lg-email-form').hidden = false; msg(''); });
+    on('lg-pw-form', 'submit', async (e) => {
+      e.preventDefault();
+      msg('Logging in…');
+      const { error } = await sb.auth.signInWithPassword({ email: $('lg-pw-email').value.trim().toLowerCase(), password: $('lg-pw').value });
+      if (error) { msg(error.message === 'Invalid login credentials' ? 'Wrong email or password.' : error.message, true); return; }
+      msg('');
+    });
     $('lg-back').addEventListener('click', () => { $('lg-code-form').hidden = true; $('lg-email-form').hidden = false; msg(''); });
     $('ub-logout').addEventListener('click', async () => { await sb.auth.signOut(); location.reload(); });
 
