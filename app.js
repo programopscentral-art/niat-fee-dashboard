@@ -105,6 +105,20 @@
     });
     $('lg-back').addEventListener('click', () => { $('lg-code-form').hidden = true; $('lg-pw-form').hidden = false; msg(''); });
     $('ub-logout').addEventListener('click', async () => { await sb.auth.signOut(); location.reload(); });
+    const pwMsg = (t, bad) => { const m = $('ub-pw-msg'); m.textContent = t || ''; m.classList.toggle('bad', !!bad); };
+    $('ub-chpw').addEventListener('click', () => { $('ub-pw-form').hidden = false; pwMsg(''); $('ub-pw1').focus(); });
+    $('ub-pw-cancel').addEventListener('click', () => { $('ub-pw-form').hidden = true; $('ub-pw-form').reset(); pwMsg(''); });
+    $('ub-pw-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const p1 = $('ub-pw1').value, p2 = $('ub-pw2').value;
+      if (p1.length < 8) { pwMsg('Use at least 8 characters.', true); return; }
+      if (p1 !== p2) { pwMsg('The two passwords don’t match.', true); return; }
+      pwMsg('Saving…');
+      const { error } = await sb.auth.updateUser({ password: p1 });
+      if (error) { pwMsg(error.message, true); return; }
+      $('ub-pw-form').reset(); pwMsg('Password changed. Use the new one next time you log in.');
+      setTimeout(() => { $('ub-pw-form').hidden = true; pwMsg(''); }, 4000);
+    });
 
     let t;
     window.addEventListener('resize', () => { clearTimeout(t); t = setTimeout(runAll, 150); });

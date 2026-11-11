@@ -54,7 +54,7 @@ html, body { margin: 0; background: var(--color-bg); color: var(--color-fg); fon
       <label for="lg-pw">Password</label>
       <input id="lg-pw" type="password" autocomplete="current-password" required>
       <button type="submit">Log in</button>
-      <button type="button" class="lg-link" id="lg-to-email">No password? Get a login link by email</button>
+      <p class="lg-note">Forgot your password? Ask the central team to reset it.</p>
     </form>
     <form id="lg-email-form" hidden>
       <label for="lg-email">Work email</label>
@@ -74,7 +74,17 @@ html, body { margin: 0; background: var(--color-bg); color: var(--color-fg); fon
 </div>
 <div id="userbar" class="ub" hidden>
   <span>Signed in as <b id="ub-name"></b> · <span id="ub-scope"></span></span>
+  <button type="button" id="ub-chpw">Change password</button>
   <button type="button" id="ub-logout">Log out</button>
+  <form id="ub-pw-form" class="ub-pw" hidden>
+    <label for="ub-pw1">New password</label>
+    <input id="ub-pw1" type="password" autocomplete="new-password" minlength="8" required>
+    <label for="ub-pw2">Type it again</label>
+    <input id="ub-pw2" type="password" autocomplete="new-password" minlength="8" required>
+    <button type="submit">Save password</button>
+    <button type="button" id="ub-pw-cancel">Cancel</button>
+    <span id="ub-pw-msg" class="ub-pw-msg" role="status"></span>
+  </form>
 </div>
 <div id="app" hidden>
 <div id="dash-root">

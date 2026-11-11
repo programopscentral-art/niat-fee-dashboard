@@ -15,4 +15,10 @@
 .lg-msg.bad { color: var(--color-bad); }
 .ub { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 12px; padding: 10px clamp(1rem, 3vw, 2.25rem) 0; font-family: var(--font-anthropic-sans); font-size: .85rem; color: var(--color-fg-muted); }
 .ub b { color: var(--color-fg); }
+.ub-pw { flex-basis: 100%; display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 8px; padding: 10px 12px; border: 1px solid var(--color-border-line); border-radius: 10px; background: var(--color-panel); }
+.ub-pw[hidden] { display: none; }
+.ub-pw input { font: inherit; font-size: .85rem; padding: 5px 9px; border: 1px solid var(--color-border-line); border-radius: 8px; background: var(--color-bg); color: var(--color-fg); width: 11rem; }
+.ub-pw button[type=submit] { background: #12315a; color: #fff; border-color: #12315a; }
+.ub-pw-msg { flex-basis: 100%; text-align: right; min-height: 1em; }
+.ub-pw-msg.bad { color: var(--color-bad); }
 .ub button { font: inherit; font-size: .85rem; padding: 5px 12px; border: 1px solid var(--color-border-line); border-radius: 8px; background: var(--color-panel); color: var(--color-fg); cursor: pointer; }
